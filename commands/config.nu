@@ -70,7 +70,7 @@ def get-default-config []: nothing -> record {
             sources: [github]
             github: {
                 per_page: 100
-                cache_duration: "1hr"
+                cache_duration: "1h"
             }
         }
     }
