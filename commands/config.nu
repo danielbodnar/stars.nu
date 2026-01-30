@@ -85,7 +85,7 @@ def load-config []: nothing -> record {
     }
 
     try {
-        open $config_path
+        open $config_path | from nuon
     } catch {|e|
         print --stderr $"Warning: Failed to load config, using defaults: ($e.msg)"
         get-default-config

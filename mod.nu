@@ -12,8 +12,8 @@
 # # Quick Start
 #
 # ```nushell
-# # Load the module
-# use stars
+# # Load the module (use glob import for subcommand access)
+# use stars *
 #
 # # Sync stars from GitHub
 # stars sync
