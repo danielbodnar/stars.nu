@@ -66,7 +66,7 @@
 # - Use `--dataframe` or `--lazyframe` flags for Polars output
 #
 # # Dependencies
-# - Nushell 0.100.0+
+# - Nushell 0.110.0+
 # - gh CLI (for GitHub sync) - `gh auth login` for authentication
 # - nu_plugin_polars (optional) - for DataFrame/LazyFrame output
 #
@@ -751,7 +751,7 @@ EXAMPLES
   stars \"machine learning\" | stars export csv --output ml-repos.csv
 
 DEPENDENCIES
-  - Nushell 0.100.0+
+  - Nushell 0.110.0+
   - gh CLI \(authenticated via 'gh auth login'\)
   - nu_plugin_polars \(optional, for DataFrame output\)
 

@@ -45,7 +45,7 @@ def get-default-config []: nothing -> record {
         version: "3.0.0"
         storage: {
             db_path: null
-            backup_on_sync: true
+            backup_on_sync: false
         }
         defaults: {
             filters: {
