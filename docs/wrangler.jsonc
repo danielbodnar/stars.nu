@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "stars-nu-docs",
+  "name": "docs-stars-nu",
   "account_id": "5dae265f74e6077ad674a3d855bf9853",
   "compatibility_date": "2026-02-15",
   "workers_dev": true,
