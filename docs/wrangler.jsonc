@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stars-nu-docs",
+  "compatibility_date": "2026-02-15",
+  "assets": {
+    "directory": "./dist/docs"
+  }
+}

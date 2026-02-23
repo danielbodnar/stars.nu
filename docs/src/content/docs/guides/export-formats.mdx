@@ -1,0 +1,131 @@
+---
+title: Export Formats
+description: Detailed examples of each export format.
+---
+
+## CSV
+
+Standard comma-separated values. Ideal for spreadsheet import or data processing.
+
+```nushell
+stars export csv --output ~/my-stars.csv
+```
+
+Sample output:
+
+```csv
+name,full_name,url,description,language,stars,forks,created_at,updated_at,owner,topics,license,archived,is_fork
+ripgrep,BurntSushi/ripgrep,https://github.com/BurntSushi/ripgrep,A line-oriented search tool,Rust,48234,1923,2016-09-10,2026-02-15,BurntSushi,command-line;grep;regex;search,Unlicense,false,false
+```
+
+## JSON
+
+Full-fidelity JSON export. Use `--pretty` for human-readable formatting, `--minimal` for a compact subset.
+
+```nushell
+stars export json --pretty --output ~/my-stars.json
+```
+
+Full export includes all database columns. Minimal export (`--minimal`) includes only:
+
+```json
+[
+  {
+    "name": "BurntSushi/ripgrep",
+    "url": "https://github.com/BurntSushi/ripgrep",
+    "description": "A line-oriented search tool",
+    "language": "Rust",
+    "topics": ["command-line", "grep", "regex", "search"]
+  }
+]
+```
+
+## NUON
+
+Nushell Object Notation — Nushell's native serialization format. Round-trips perfectly with `from nuon`.
+
+```nushell
+stars export nuon --output ~/my-stars.nuon
+
+# Re-import later
+open ~/my-stars.nuon | from nuon
+```
+
+## Markdown
+
+A Markdown table suitable for documentation, GitHub issues, or READMEs.
+
+```nushell
+stars export md --output ~/my-stars.md
+```
+
+Sample output:
+
+```markdown
+# GitHub Stars Export
+
+Generated: 2026-02-23 15:30:00
+
+Total: 1247 repositories
+
+| name | description | language | stars |
+| --- | --- | --- | --- |
+| ripgrep | A line-oriented search tool | Rust | 48234 |
+| nushell | A new type of shell | Rust | 32456 |
+```
+
+Customize columns:
+
+```nushell
+stars export md --columns [name url language stars owner]
+```
+
+## Firefox bookmarks
+
+Generates Netscape Bookmark File Format HTML compatible with Firefox import.
+
+```nushell
+stars export firefox --group-by language
+```
+
+Repos are organized into bookmark folders based on the `--group-by` option:
+
+- `language` (default) — folders like "Rust", "TypeScript", "Go"
+- `owner` — folders by repo owner
+- `topic` — folders by first topic tag
+- `year` — folders by creation year
+- `none` — single flat folder
+
+Each bookmark includes:
+- Link to the repository
+- `ADD_DATE` from the repo's creation date
+- `TAGS` from topics + language
+- Description as `<DD>` element
+
+**Import**: Firefox > Bookmarks > Manage Bookmarks > Import and Backup > Import Bookmarks from HTML
+
+## Chrome bookmarks
+
+Same format as Firefox but with Chrome-specific header. Import via `chrome://bookmarks`.
+
+```nushell
+stars export chrome --group-by topic --output ~/chrome-stars.html
+```
+
+Supports the same `--group-by`, `--include-archived`, and `--include-forks` flags as Firefox export.
+
+## Output paths
+
+All exports default to timestamped files in the exports directory:
+
+```
+$XDG_DATA_HOME/.stars/exports/
+├── stars_20260223_153000.csv
+├── stars_20260223_160000.json
+├── stars_20260223_170000.nuon
+├── stars_20260223_180000.md
+├── bookmarks_firefox_20260223_190000.html
+└── bookmarks_chrome_20260223_200000.html
+```
+
+Use `--output` (`-o`) on any export command to write to a custom path instead.

@@ -1,0 +1,32 @@
+---
+title: stars.nu
+description: A comprehensive Nushell module for managing GitHub starred repositories.
+template: splash
+hero:
+  tagline: Sync, search, filter, and export your GitHub stars — all from Nushell.
+  actions:
+    - text: Get Started
+      link: /getting-started/installation/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/danielbodnar/stars.nu
+      variant: minimal
+      icon: github
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+  <Card title="GitHub Sync" icon="rocket">
+    Fetch all your starred repos via the `gh` CLI with incremental sync support. Only new stars are fetched after the first run.
+  </Card>
+  <Card title="SQLite Storage" icon="document">
+    Stars are stored locally in an XDG-compliant SQLite database for instant offline queries and filtering.
+  </Card>
+  <Card title="Multiple Exports" icon="list-format">
+    Export to CSV, JSON, NUON, Markdown, Firefox bookmarks, or Chrome bookmarks with a single command.
+  </Card>
+  <Card title="Polars Analytics" icon="setting">
+    Optional Polars DataFrame/LazyFrame output for high-performance analytics pipelines directly in Nushell.
+  </Card>
+</CardGrid>

@@ -1,0 +1,105 @@
+---
+title: Configuration Options
+description: Complete reference of all configuration keys.
+---
+
+Configuration is stored in NUON format at `$XDG_CONFIG_HOME/stars/config.nu`.
+
+Access any key with dot notation: `stars config get <key>`
+
+## Top-level
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `version` | `string` | `"3.0.0"` | Config schema version |
+
+## `storage`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `storage.db_path` | `path?` | `null` | Custom database path. `null` = use XDG default. |
+| `storage.backup_on_sync` | `bool` | `false` | Auto-backup before every sync |
+
+## `defaults`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `defaults.columns` | `list<string>` | `[owner, name, language, stars, pushed, homepage, topics, description, forks, issues]` | Columns shown in table output |
+| `defaults.sort_by` | `string` | `"stars"` | Default sort field. Options: `stars`, `forks`, `pushed`, `created`, `updated`, `name`, `language`, `owner` |
+| `defaults.sort_reverse` | `bool` | `true` | Reverse sort order (true = descending) |
+
+## `defaults.filters`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `defaults.filters.exclude_languages` | `list<string>` | `[PHP, "C#", Java, Python, Ruby]` | Languages to exclude from default view |
+| `defaults.filters.exclude_archived` | `bool` | `true` | Hide archived repositories |
+| `defaults.filters.exclude_forks` | `bool` | `false` | Hide forked repositories |
+| `defaults.filters.min_pushed_days` | `int` | `365` | Exclude repos not pushed in this many days |
+
+## `output`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `output.default_format` | `string` | `"table"` | Default output format |
+
+## `output.table`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `output.table.max_description_length` | `int` | `80` | Truncate descriptions longer than this |
+| `output.table.clickable_links` | `bool` | `true` | Render clickable terminal hyperlinks |
+| `output.table.colorize_languages` | `bool` | `true` | Color-code language names |
+
+## `sync`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `sync.sources` | `list<string>` | `[github]` | Active sync sources |
+
+## `sync.github`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `sync.github.per_page` | `int` | `100` | Stars per API page (max: 100) |
+| `sync.github.cache_duration` | `string` | `"1h"` | gh CLI cache TTL |
+| `sync.github.full_sync_interval_days` | `int` | `7` | Days between auto full syncs |
+
+## Example: full default config
+
+```nushell
+{
+    version: "3.0.0"
+    storage: {
+        db_path: null
+        backup_on_sync: false
+    }
+    defaults: {
+        filters: {
+            exclude_languages: [PHP, "C#", Java, Python, Ruby]
+            exclude_archived: true
+            exclude_forks: false
+            min_pushed_days: 365
+        }
+        columns: [owner, name, language, stars, pushed, homepage, topics, description, forks, issues]
+        sort_by: "stars"
+        sort_reverse: true
+    }
+    output: {
+        default_format: "table"
+        table: {
+            max_description_length: 80
+            clickable_links: true
+            colorize_languages: true
+        }
+    }
+    sync: {
+        sources: [github]
+        github: {
+            per_page: 100
+            cache_duration: "1h"
+            full_sync_interval_days: 7
+        }
+    }
+}
+```

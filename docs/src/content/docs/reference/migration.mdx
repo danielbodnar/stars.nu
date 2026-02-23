@@ -1,0 +1,91 @@
+---
+title: Migration from gh-stars
+description: How the module migrates from the legacy gh-stars format.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Background
+
+The `stars.nu` module (v3.0.0) replaced the earlier `gh-stars` module. The database location changed:
+
+| Version | Database path |
+|---------|--------------|
+| Legacy (`gh-stars`) | `$XDG_DATA_HOME/gh-stars/stars.db` |
+| Current (`stars.nu` v3) | `$XDG_DATA_HOME/.stars/stars.db` |
+
+## Automatic migration
+
+On first use, the `stars` command checks for the legacy database and migrates it automatically. This happens in the `check-migration` function called at the start of the `main` command.
+
+### What happens
+
+1. Checks if the new database (`$XDG_DATA_HOME/.stars/stars.db`) already exists — if so, skips migration
+2. Checks if the old database (`$XDG_DATA_HOME/gh-stars/stars.db`) exists — if not, nothing to migrate
+3. Creates the new storage directory structure
+4. Loads all records from the old database
+5. Adds `source: "github"` column if missing
+6. Adds `synced_at` column with current timestamp if missing
+7. Writes to the new database location
+8. **Preserves the old database** — it is NOT deleted
+
+### Output
+
+```
+Migrating from /home/user/.local/share/gh-stars/stars.db to /home/user/.local/share/.stars/stars.db...
+Successfully migrated 1247 stars to new location
+Old database preserved at: /home/user/.local/share/gh-stars/stars.db
+```
+
+<Aside type="tip">
+  The old database is intentionally preserved. You can delete it manually after confirming the migration was successful:
+
+  ```nushell
+  rm -r ($env.XDG_DATA_HOME | default "~/.local/share" | path join gh-stars)
+  ```
+</Aside>
+
+## Manual migration
+
+If automatic migration doesn't trigger (e.g., both databases exist), you can migrate manually:
+
+```nushell
+let old_db = ($env.XDG_DATA_HOME | default "~/.local/share" | path join gh-stars stars.db)
+let new_db = ($env.XDG_DATA_HOME | default "~/.local/share" | path join .stars stars.db)
+
+# Copy the database
+cp $old_db $new_db
+
+# Add missing columns
+open $new_db | query db "ALTER TABLE stars ADD COLUMN source TEXT DEFAULT 'github'"
+open $new_db | query db "ALTER TABLE stars ADD COLUMN synced_at TEXT"
+open $new_db | query db "ALTER TABLE stars ADD COLUMN starred_at TEXT"
+```
+
+Then run a fresh sync to populate the new columns:
+
+```nushell
+stars sync --full
+```
+
+## Schema changes from gh-stars
+
+The v3 schema adds several columns that didn't exist in the legacy format:
+
+| Column | Added in v3 | Description |
+|--------|------------|-------------|
+| `source` | Yes | Data source identifier (`"github"`, etc.) |
+| `synced_at` | Yes | When the record was last synced |
+| `starred_at` | Yes | When the user starred the repo (from GitHub API) |
+
+The `starred_at` column is also added via `ALTER TABLE` in `ensure-storage` for databases created before incremental sync was implemented.
+
+## Post-migration sync
+
+After migration, run a full sync to populate `starred_at` timestamps (which weren't captured by the legacy module):
+
+```nushell
+stars sync --full
+```
+
+This replaces all records with fresh data from GitHub, including `starred_at` timestamps needed for incremental sync.

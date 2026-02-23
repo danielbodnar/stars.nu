@@ -1,0 +1,109 @@
+---
+title: SQLite Schema
+description: Full database schema reference.
+---
+
+## Database location
+
+```
+$XDG_DATA_HOME/.stars/stars.db
+```
+
+Default: `~/.local/share/.stars/stars.db`
+
+## `stars` table
+
+The table is created implicitly by Nushell's `into sqlite` command. Column types are inferred from the data. The effective schema:
+
+```sql
+CREATE TABLE stars (
+    id              INTEGER,
+    node_id         TEXT,
+    name            TEXT,
+    full_name       TEXT,
+    owner           TEXT,
+    private         INTEGER,    -- 0 or 1
+    html_url        TEXT,
+    description     TEXT,
+    fork            INTEGER,    -- 0 or 1
+    url             TEXT,       -- API URL (not html_url)
+    created_at      TEXT,       -- ISO-8601
+    updated_at      TEXT,       -- ISO-8601
+    pushed_at       TEXT,       -- ISO-8601
+    homepage        TEXT,
+    size            INTEGER,
+    stargazers_count INTEGER,
+    watchers_count  INTEGER,
+    language        TEXT,
+    forks_count     INTEGER,
+    archived        INTEGER,    -- 0 or 1
+    disabled        INTEGER,    -- 0 or 1
+    open_issues_count INTEGER,
+    license         TEXT,
+    topics          TEXT,       -- JSON-encoded array
+    visibility      TEXT,       -- "public"
+    default_branch  TEXT,       -- "main"
+    source          TEXT,       -- "github"
+    synced_at       TEXT,       -- ISO-8601
+    starred_at      TEXT        -- ISO-8601 (nullable)
+);
+```
+
+### Column notes
+
+| Column | Storage type | Notes |
+|--------|-------------|-------|
+| `archived` | `INTEGER` | `0` = not archived, `1` = archived. Not a boolean. |
+| `fork` | `INTEGER` | `0` = not a fork, `1` = is a fork. Not a boolean. |
+| `private` | `INTEGER` | `0` = public, `1` = private. Always `0` for starred repos. |
+| `disabled` | `INTEGER` | `0` = enabled, `1` = disabled. |
+| `topics` | `TEXT` | JSON array: `["rust","cli","tool"]`. Use `from json` to parse. |
+| `license` | `TEXT` | License name string (e.g., "MIT License"), not JSON. |
+| `owner` | `TEXT` | Plain string login (e.g., "rust-lang"), not a JSON object. |
+| `starred_at` | `TEXT` | Nullable. Added via `ALTER TABLE` migration on older databases. |
+| `html_url` | `TEXT` | The browseable GitHub URL. Different from `url` (API endpoint). |
+
+## `sync_metadata` table
+
+```sql
+CREATE TABLE sync_metadata (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
+```
+
+### Current keys
+
+| Key | Value format | Description |
+|-----|-------------|-------------|
+| `last_synced_at` | ISO-8601 datetime | Most recent sync completion time |
+| `last_full_sync_at` | ISO-8601 datetime | Most recent full sync completion time |
+
+## Querying directly
+
+You can query the database directly with Nushell:
+
+```nushell
+let db = $"($env.XDG_DATA_HOME? | default '~/.local/share')/.stars/stars.db"
+
+# All stars
+open $db | query db "SELECT * FROM stars"
+
+# Top Rust repos
+open $db | query db "SELECT full_name, stargazers_count FROM stars WHERE language = 'Rust' ORDER BY stargazers_count DESC LIMIT 10"
+
+# Language distribution
+open $db | query db "SELECT language, COUNT(*) as count FROM stars WHERE language IS NOT NULL GROUP BY language ORDER BY count DESC"
+
+# Sync metadata
+open $db | query db "SELECT * FROM sync_metadata"
+```
+
+## No explicit indexes
+
+The table does not have explicitly created indexes. Nushell's `into sqlite` creates the table without indexes. For the typical dataset size (hundreds to low thousands of rows), full table scans are fast enough. If performance becomes an issue with very large datasets, you can add indexes manually:
+
+```nushell
+open $db | query db "CREATE INDEX IF NOT EXISTS idx_stars_language ON stars(language)"
+open $db | query db "CREATE INDEX IF NOT EXISTS idx_stars_owner ON stars(owner)"
+```

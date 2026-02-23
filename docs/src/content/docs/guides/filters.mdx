@@ -1,0 +1,103 @@
+---
+title: Default Filters
+description: How stars.nu filters out noise by default and how to customize it.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## What gets filtered
+
+By default, `stars` applies several filters to keep the output useful. These run automatically unless you pass `--no-defaults`.
+
+| Filter | Default | What it does |
+|--------|---------|-------------|
+| Archived repos | Excluded | Hides repos marked as archived on GitHub |
+| Stale repos | Excluded if >365 days | Hides repos not pushed to in over a year |
+| Language exclusions | PHP, C#, Java, Python, Ruby | Hides repos in these languages |
+| Forks | Included | Forks are **not** excluded by default |
+
+## Bypassing filters
+
+To see everything in your database, unfiltered:
+
+```nushell
+stars --no-defaults
+```
+
+This shows all repos regardless of archive status, age, language, or fork status.
+
+## Customizing filters
+
+### Change excluded languages
+
+```nushell
+# See current exclusions
+stars config get defaults.filters.exclude_languages
+# => [PHP, C#, Java, Python, Ruby]
+
+# Remove all language exclusions
+stars config set defaults.filters.exclude_languages []
+
+# Only exclude PHP
+stars config set defaults.filters.exclude_languages [PHP]
+```
+
+### Show archived repos
+
+```nushell
+stars config set defaults.filters.exclude_archived false
+```
+
+### Exclude forks
+
+Forks are included by default. To exclude them:
+
+```nushell
+stars config set defaults.filters.exclude_forks true
+```
+
+### Change the staleness threshold
+
+The default is 365 days. To show repos not pushed in up to 2 years:
+
+```nushell
+stars config set defaults.filters.min_pushed_days 730
+```
+
+To effectively disable the staleness filter, set a very large number:
+
+```nushell
+stars config set defaults.filters.min_pushed_days 99999
+```
+
+## How filters work internally
+
+Filters are applied in `mod.nu`'s `apply-default-filters` function:
+
+1. Read filter settings from config (with hardcoded fallbacks)
+2. Calculate the cutoff date: `(date now) - (min_pushed_days * 1day)`
+3. For each repo, check:
+   - `archived` — stored as integer (0/1) in SQLite, converted to bool
+   - `fork` — same integer-to-bool conversion
+   - `language` — checked against the exclusion list (empty language always passes)
+   - `pushed_at` — parsed to datetime and compared against cutoff
+4. A repo must pass **all** active filters to appear in output
+
+<Aside type="caution">
+  The `archived` and `fork` columns in SQLite are stored as integers (0/1), not booleans. The filter logic handles both representations, but if you're querying the database directly with `--raw`, be aware of this.
+</Aside>
+
+## Pipeline-based filtering
+
+For ad-hoc filtering beyond the defaults, use Nushell pipelines:
+
+```nushell
+# Only Rust repos with 100+ stars
+stars --raw | where language == "Rust" | where stargazers_count > 100
+
+# Repos pushed in the last 30 days
+stars --raw | where { ($in.pushed_at | into datetime) > ((date now) - 30day) }
+
+# Repos with specific topics
+stars --raw | where { "machine-learning" in ($in.topics | from json) }
+```

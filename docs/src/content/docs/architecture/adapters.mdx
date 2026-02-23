@@ -1,0 +1,128 @@
+---
+title: Adapters
+description: How source-specific adapters normalize data for storage.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Adapter pattern
+
+Each data source has a dedicated adapter in the `adapters/` directory. An adapter's job is to:
+
+1. Fetch raw data from the source
+2. Handle pagination, authentication, and rate limits
+3. Normalize each record to the canonical star schema
+4. Return a standard Nushell table
+
+The storage layer receives normalized data and doesn't need to know which source it came from.
+
+## GitHub adapter
+
+**File**: `adapters/github.nu`
+
+The GitHub adapter is the primary (and currently only implemented) adapter. It uses the `gh` CLI for all API calls.
+
+### Key functions
+
+| Function | Description |
+|----------|-------------|
+| `fetch` | Fetch all starred repos with pagination |
+| `normalize-repo` | Transform a GitHub API response to internal schema |
+| `get-authenticated-user` | Get the current `gh` user's login |
+| `check-auth` | Verify `gh` CLI is installed and authenticated |
+
+### Pagination
+
+The `fetch` function uses Nushell's `generate` for stateful pagination:
+
+```
+Page 1 → 100 stars → normalize → check if done → next state
+Page 2 → 100 stars → normalize → check if done → next state
+...
+Page N → <100 stars → normalize → done
+```
+
+Pagination stops when:
+- A page returns fewer than `per_page` items (last page)
+- A page returns zero items
+- For incremental sync: the oldest `starred_at` on a page is older than the `--since` cutoff
+
+### Star+JSON format
+
+The adapter always requests `application/vnd.github.star+json`, which wraps each repo in an envelope:
+
+```json
+{
+  "starred_at": "2026-02-20T14:30:00Z",
+  "repo": {
+    "id": 12345,
+    "name": "example",
+    "full_name": "owner/example",
+    ...
+  }
+}
+```
+
+The `process-page` function extracts `repo` and attaches `starred_at` during normalization.
+
+### Normalization
+
+`normalize-repo` maps GitHub's API fields to the internal schema:
+
+| GitHub API field | Internal field | Notes |
+|-----------------|----------------|-------|
+| `id` | `id` | Direct mapping |
+| `owner.login` | `owner` | Extracted from nested object |
+| `name` | `name` | Direct |
+| `full_name` | `full_name` | Direct |
+| `html_url` | `html_url` | Kept as `html_url` (not renamed to `url`) |
+| `description` | `description` | Nullable |
+| `language` | `language` | Nullable |
+| `topics` | `topics` | Converted from list to JSON string |
+| `stargazers_count` | `stargazers_count` | Direct |
+| `forks_count` | `forks_count` | Direct |
+| `open_issues_count` | `open_issues_count` | Direct |
+| `license.name` | `license` | Extracted from nested object |
+| `archived` | `archived` | Boolean |
+| `fork` | `fork` | Boolean |
+| `pushed_at` | `pushed_at` | ISO-8601 string |
+| *(generated)* | `source` | Always `"github"` |
+| *(generated)* | `synced_at` | Current timestamp |
+| *(from envelope)* | `starred_at` | When you starred it |
+
+### Caching
+
+The adapter supports `gh api --cache` for built-in HTTP caching:
+
+```nushell
+fetch --use-cache --cache-duration "1h"
+```
+
+This is especially useful during development or repeated queries.
+
+### Error handling
+
+API errors produce structured Nushell errors with contextual help:
+
+- **401/authentication errors** → "Run 'gh auth login' to authenticate"
+- **403/rate limit** → "Wait a few minutes or use --use-cache"
+- **404/not found** → "Check the username or repository"
+- **Other errors** → "Check network connection and gh CLI configuration"
+
+## Planned adapters
+
+<Aside type="note">
+  These adapters exist as placeholder files but are not yet implemented.
+</Aside>
+
+### Firefox adapter (`adapters/firefox.nu`)
+
+Will parse Firefox's `places.sqlite` database or exported HTML bookmarks to import GitHub repository bookmarks.
+
+### Chrome adapter (`adapters/chrome.nu`)
+
+Will parse Chrome's `Bookmarks` JSON file to import GitHub repository bookmarks.
+
+### Awesome list adapter (`adapters/awesome.nu`)
+
+Will parse awesome list Markdown files (following the [awesome list](https://github.com/sindresorhus/awesome) format) to extract and import repository links.

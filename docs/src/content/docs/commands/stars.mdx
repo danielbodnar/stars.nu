@@ -1,0 +1,102 @@
+---
+title: "stars (main command)"
+description: Display, search, and filter your starred repositories.
+---
+
+The main `stars` command loads your local database, applies filters, and outputs results in your chosen format.
+
+## Usage
+
+```nushell
+stars [query] [flags]
+```
+
+## Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | `string?` | Optional search query — matches against name, full_name, description, and topics |
+
+## Output flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON |
+| `--csv` | Output as CSV |
+| `--md` | Output as Markdown table |
+| `--nuon` | Output as NUON (Nushell Object Notation) |
+| `--dataframe` | Output as Polars DataFrame (requires `nu_plugin_polars`) |
+| `--lazyframe` | Output as Polars LazyFrame (requires `nu_plugin_polars`) |
+| `--raw` | Raw database output — all columns, no formatting |
+
+## Filter and sort flags
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--no-defaults` | | | | Skip default filters (show archived, stale, excluded languages) |
+| `--columns` | `-c` | `list<string>` | config value | Columns to display |
+| `--limit` | `-l` | `int` | unlimited | Limit number of results |
+| `--sort` | `-s` | `string` | `"stars"` | Sort by: `stars`, `forks`, `pushed`, `created`, `name`, `language`, `owner` |
+| `--reverse` | `-r` | | `true` | Reverse sort order |
+
+## Examples
+
+```nushell
+# Show all stars with default formatting
+stars
+
+# Search for CLI tools
+stars "cli tool"
+
+# Top 20 repos by star count
+stars --limit 20
+
+# Output as JSON
+stars --json | save stars.json
+
+# Show all repos (no default filters)
+stars --no-defaults
+
+# Show only specific columns
+stars --columns [owner name language stars]
+
+# Sort by last push date
+stars --sort pushed
+
+# Pipe to Nushell for further filtering
+stars --raw | where language == "Rust" | where stargazers_count > 1000
+```
+
+## How it works
+
+1. Checks for migration from legacy `gh-stars` on first use
+2. Loads all data from SQLite via `core/storage.nu`
+3. Applies default filters (unless `--no-defaults`): excludes archived repos, repos not pushed in 365+ days, and certain languages
+4. Applies search query if provided (case-insensitive match against name, full_name, description, topics)
+5. Sorts by the chosen field (default: star count, descending)
+6. Applies `--limit` if set
+7. Formats output based on chosen format flag (default: colored table)
+
+## Version
+
+```nushell
+stars version
+```
+
+Returns a record with module version, Nushell version, and Polars plugin status:
+
+```
+╭─────────┬───────────────╮
+│ version │ 3.0.0         │
+│ nushell │ 0.110.0       │
+│ polars  │ not installed │
+╰─────────┴───────────────╯
+```
+
+## Help
+
+```nushell
+stars help
+```
+
+Prints detailed usage information for all commands, flags, and examples.

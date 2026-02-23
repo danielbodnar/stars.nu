@@ -1,0 +1,104 @@
+---
+title: stars sync
+description: Sync starred repositories from GitHub.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## stars sync
+
+Syncs starred repositories from all configured sources. Currently supports GitHub; Firefox, Chrome, and awesome list adapters are planned.
+
+### Usage
+
+```nushell
+stars sync [flags]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--full` | Force a full sync (re-fetch all stars, replacing the database) |
+| `--backup` | Create a timestamped backup before syncing |
+| `--no-cache` | Bypass `gh` CLI cache for fresh API responses |
+
+### Behavior
+
+By default, `stars sync` performs an **incremental sync**:
+
+1. Reads `last_synced_at` from the `sync_metadata` table
+2. Fetches only stars newer than that timestamp using `starred_at` ordering
+3. Uses early-stop pagination — stops fetching pages once it finds stars older than the cutoff
+4. Upserts new/updated records into the existing database
+5. Updates `last_synced_at` with the current time
+
+The command **auto-escalates** to a full sync when:
+
+- This is the first sync (no `last_synced_at` exists)
+- `--full` flag is passed
+- The last full sync was more than `full_sync_interval_days` ago (default: 7, configurable)
+
+### Examples
+
+```nushell
+# Default incremental sync
+stars sync
+
+# Force re-fetch of everything
+stars sync --full
+
+# Backup before syncing
+stars sync --backup
+
+# Fresh data (bypass cache)
+stars sync --no-cache
+```
+
+---
+
+## stars sync github
+
+Syncs specifically from the GitHub API. This is what `stars sync` delegates to under the hood, but allows passing `--user` to sync a different user's stars.
+
+### Usage
+
+```nushell
+stars sync github [flags]
+```
+
+### Flags
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--user` | `-u` | `string` | GitHub username (default: authenticated user) |
+| `--full` | | | Force full sync |
+| `--backup` | | | Create backup before syncing |
+| `--no-cache` | | | Bypass `gh` CLI cache |
+
+### Examples
+
+```nushell
+# Sync authenticated user's stars
+stars sync github
+
+# Sync another user's stars
+stars sync github --user octocat
+
+# Full re-fetch with backup
+stars sync github --full --backup
+```
+
+<Aside type="note">
+  When syncing another user's stars, only their **public** starred repositories are visible through the API.
+</Aside>
+
+### API details
+
+The GitHub adapter (`adapters/github.nu`):
+
+- Uses `gh api user/starred` (or `users/{user}/starred`)
+- Requests `application/vnd.github.star+json` Accept header to get `starred_at` timestamps
+- Paginates with `per_page=100`, sorted by `created` descending (newest first)
+- Uses `gh api --cache` for built-in caching (default: 1 hour TTL)
+- Normalizes each response to the internal star schema before storage

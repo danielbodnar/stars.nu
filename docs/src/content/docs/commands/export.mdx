@@ -1,0 +1,94 @@
+---
+title: stars export
+description: Export starred repositories to various formats.
+---
+
+All export commands load the full database and write to files. By default, output goes to `$XDG_DATA_HOME/.stars/exports/` with a timestamp in the filename. Use `--output` (`-o`) to specify a custom path.
+
+## CSV
+
+```nushell
+stars export csv
+stars export csv --output ~/stars.csv
+stars export csv --columns [name url language stars]
+```
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--output` | `-o` | `path` | Custom output path |
+| `--columns` | `-c` | `list<string>` | Specific columns to include |
+
+Exported columns default to: `name`, `full_name`, `url`, `description`, `language`, `stars`, `forks`, `created_at`, `updated_at`, `owner`, `topics`, `license`, `archived`, `is_fork`.
+
+## JSON
+
+```nushell
+stars export json
+stars export json --pretty
+stars export json --minimal --pretty --output ~/stars.json
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output` | `-o` | Custom output path |
+| `--minimal` | `-m` | Export only name, url, description, language, topics |
+| `--pretty` | `-p` | Pretty-print with indentation |
+
+## NUON
+
+Exports to Nushell Object Notation — useful for re-importing into Nushell later.
+
+```nushell
+stars export nuon
+stars export nuon --output ~/stars.nuon
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--output` | `-o` | Custom output path |
+
+## Markdown
+
+Generates a Markdown table. Great for pasting into GitHub issues, PRs, or documentation.
+
+```nushell
+stars export md
+stars export md --columns [name description language stars]
+stars export md --output ~/stars.md
+```
+
+| Flag | Short | Type | Description |
+|------|-------|------|-------------|
+| `--output` | `-o` | `path` | Custom output path |
+| `--columns` | `-c` | `list<string>` | Columns to include (default: name, description, language, stars) |
+
+## Firefox bookmarks
+
+Exports as a Firefox-compatible HTML bookmarks file. Supports grouping by language, owner, topic, year, or no grouping.
+
+```nushell
+stars export firefox
+stars export firefox --group-by owner
+stars export firefox --include-archived --include-forks
+```
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--output` | `-o` | `path` | auto | Custom output path |
+| `--group-by` | `-g` | `string` | `"language"` | Grouping: `language`, `owner`, `topic`, `year`, `none` |
+| `--include-archived` | | | `false` | Include archived repos |
+| `--include-forks` | | | `false` | Include forked repos |
+
+Import the exported file into Firefox via **Bookmarks > Manage Bookmarks > Import and Backup > Import Bookmarks from HTML**.
+
+## Chrome bookmarks
+
+Same as Firefox but generates Chrome-compatible HTML.
+
+```nushell
+stars export chrome
+stars export chrome --group-by topic
+stars export chrome --output ~/chrome_bookmarks.html
+```
+
+Flags are identical to the Firefox export. Import into Chrome via **chrome://bookmarks > Import bookmarks**.

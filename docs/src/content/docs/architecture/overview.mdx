@@ -1,0 +1,95 @@
+---
+title: Architecture Overview
+description: How the stars.nu module is structured and how data flows through it.
+---
+
+## Directory structure
+
+```
+stars.nu/
+├── mod.nu                    # Entry point — main command, sync, stats, help
+├── core/
+│   ├── types.nu              # Star schema, validation, normalization helpers
+│   ├── storage.nu            # SQLite persistence layer
+│   └── data.nu               # Polars LazyFrame operations (planned)
+├── commands/
+│   ├── config.nu             # stars config [init|show|edit|get|set|reset|path|validate]
+│   ├── export.nu             # stars export [csv|json|nuon|md|firefox|chrome]
+│   ├── sync.nu               # Planned: stars sync submodule
+│   └── stats.nu              # Planned: stars stats submodule
+├── formatters/
+│   ├── table.nu              # ANSI-colored table output
+│   ├── json.nu               # JSON, CSV, NUON, Markdown formatters
+│   └── dataframe.nu          # Polars DataFrame/LazyFrame conversion
+├── adapters/
+│   ├── github.nu             # GitHub API adapter (via gh CLI)
+│   ├── firefox.nu            # Planned: Firefox bookmarks adapter
+│   ├── chrome.nu             # Planned: Chrome bookmarks adapter
+│   └── awesome.nu            # Planned: Awesome list parser
+├── filters/
+│   └── defaults.nu           # Planned: default filter implementations
+└── tests/
+    └── main.test.nu          # Test suite
+```
+
+## Module system
+
+`mod.nu` is the single entry point. It uses two re-export patterns:
+
+**Glob exports** — commands that become top-level `stars *` subcommands:
+```nushell
+export use commands/config.nu *   # → stars config, stars config get, etc.
+export use commands/export.nu *   # → stars export csv, stars export json, etc.
+export use core/types.nu *        # → star-schema, validate-star, etc.
+```
+
+**Internal imports** — functions used only within `mod.nu`:
+```nushell
+use core/storage.nu [load, store, backup, ...]
+use formatters/table.nu [format]
+use adapters/github.nu [fetch]
+```
+
+## Data flow
+
+```
+GitHub API (via gh CLI)
+       │
+       ▼
+adapters/github.nu
+  fetch [] → paginated star+json
+  normalize-repo → internal schema
+       │
+       ▼
+core/storage.nu
+  store $data → into sqlite (stars table)
+  upsert $data → merge with existing
+       │
+       ▼
+mod.nu (main command)
+  load → SELECT * FROM stars
+  apply-default-filters → exclude archived/stale/languages
+  search-data → case-insensitive match
+  sort-data → sort by chosen field
+       │
+       ▼
+formatters/
+  table.nu  → ANSI-colored table
+  json.nu   → JSON, CSV, NUON, Markdown
+  dataframe.nu → Polars DataFrame/LazyFrame
+       │
+       ▼
+Output (stdout or file)
+```
+
+## Key design decisions
+
+**Single SQLite database**: All stars from all sources go into one `stars` table. A `source` column distinguishes GitHub stars from other sources. This simplifies queries and avoids cross-database joins.
+
+**Inline commands in mod.nu**: The main `stars` command, `stars sync`, `stars sync github`, `stars stats`, and `stars help` are defined directly in `mod.nu` rather than in separate submodule files. This keeps the public API in one place and simplifies the export surface.
+
+**Schema normalization at the adapter layer**: Each adapter (GitHub, Firefox, Chrome) normalizes to the canonical schema defined in `core/types.nu` before storage. The rest of the codebase only works with the normalized format.
+
+**`store` instead of `save`**: The storage function is named `store` to avoid shadowing Nushell's built-in `save` command when the module is imported with glob.
+
+**Integer booleans in SQLite**: SQLite stores `archived` and `fork` as integers (0/1). The filter logic handles both bool and int representations transparently.

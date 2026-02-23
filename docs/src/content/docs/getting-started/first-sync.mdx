@@ -1,0 +1,100 @@
+---
+title: First Sync
+description: Authenticate with GitHub and run your first sync.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Authentication
+
+The module uses the `gh` CLI for all GitHub API calls. You need to authenticate once:
+
+```nushell
+gh auth login
+```
+
+Follow the interactive prompts. You can verify your authentication status:
+
+```nushell
+gh auth status
+```
+
+<Aside type="caution">
+  The module does **not** use `GITHUB_TOKEN` directly. It relies entirely on `gh auth` for credentials. Make sure `gh` is authenticated before syncing.
+</Aside>
+
+## Running your first sync
+
+```nushell
+stars sync
+```
+
+On first run, this performs a **full sync** — fetching every starred repository from your account. The module:
+
+<Steps>
+
+1. Detects this is the first sync (no `last_synced_at` metadata exists)
+2. Requests pages of 100 stars each using `application/vnd.github.star+json` for `starred_at` timestamps
+3. Normalizes each repo to the internal schema
+4. Stores everything in `$XDG_DATA_HOME/.stars/stars.db`
+5. Records the sync timestamp in the `sync_metadata` table
+
+</Steps>
+
+### Understanding the output
+
+```
+Full sync from GitHub...
+Full sync complete: 1247 stars
+```
+
+For incremental syncs (subsequent runs):
+
+```
+Incremental sync from GitHub...
+Synced 3 new/updated stars (1250 total)
+```
+
+Or if nothing has changed:
+
+```
+Incremental sync from GitHub...
+Already up to date
+```
+
+## Full vs. incremental sync
+
+| Mode | When | What happens |
+|------|------|-------------|
+| **Full** | First run, `--full` flag, or auto-escalation | Fetches all stars, replaces database |
+| **Incremental** | Subsequent runs (default) | Fetches only stars newer than `last_synced_at`, upserts into database |
+
+Auto-escalation to full sync happens when:
+- No previous sync exists
+- The last full sync was more than `full_sync_interval_days` ago (default: 7 days)
+
+## Syncing a specific user
+
+You can sync stars for any public GitHub user:
+
+```nushell
+stars sync github --user octocat
+```
+
+## Cache control
+
+By default, `gh api` caching is enabled with a 1-hour TTL. To bypass the cache:
+
+```nushell
+stars sync --no-cache
+```
+
+## Creating backups
+
+Create a backup before syncing:
+
+```nushell
+stars sync --backup
+```
+
+This copies the current database to `$XDG_DATA_HOME/.stars/backups/stars_YYYYMMDD_HHMMSS.db` before any changes are made.

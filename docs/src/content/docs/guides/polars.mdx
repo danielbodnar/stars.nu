@@ -1,0 +1,122 @@
+---
+title: Polars DataFrames
+description: Using Polars for high-performance analytics on your stars.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The `stars` command supports two Polars output modes via optional flags:
+
+- `--dataframe` — returns a Polars DataFrame (eager evaluation)
+- `--lazyframe` — returns a Polars LazyFrame (lazy evaluation, optimized query plan)
+
+These require the `nu_plugin_polars` Nushell plugin.
+
+## Installing Polars
+
+```nushell
+cargo install nu_plugin_polars
+plugin add ~/.cargo/bin/nu_plugin_polars
+```
+
+Restart Nushell or run `plugin use polars`. Verify:
+
+```nushell
+stars version
+# polars field should show "available" instead of "not installed"
+```
+
+## DataFrame output
+
+```nushell
+stars --dataframe
+```
+
+Returns a Polars DataFrame that you can chain with Polars commands:
+
+```nushell
+# Filter Rust repos with 1000+ stars
+stars --dataframe
+| polars filter ((polars col language) == "Rust")
+| polars filter ((polars col stargazers_count) > 1000)
+| polars sort-by stargazers_count --reverse
+| polars collect
+```
+
+## LazyFrame output
+
+```nushell
+stars --lazyframe
+```
+
+Returns a LazyFrame — operations are not executed until you call `polars collect`. This is more efficient for complex multi-step transformations:
+
+```nushell
+stars --lazyframe
+| polars filter ((polars col language) == "TypeScript")
+| polars group-by language
+| polars agg [(polars col stargazers_count | polars mean)]
+| polars collect
+```
+
+<Aside type="tip">
+  Prefer `--lazyframe` for analytics pipelines. Polars optimizes the entire query plan before execution, which is significantly faster for multi-step operations.
+</Aside>
+
+## Example analytics
+
+### Language distribution
+
+```nushell
+stars --dataframe
+| polars group-by language
+| polars agg [
+    (polars col name | polars count | polars as count)
+    (polars col stargazers_count | polars sum | polars as total_stars)
+]
+| polars sort-by count --reverse
+| polars collect
+| first 20
+```
+
+### Stars over time
+
+```nushell
+stars --dataframe
+| polars with-column [(polars col starred_at | polars str-slice 0 7 | polars as month)]
+| polars group-by month
+| polars agg [(polars col name | polars count | polars as starred)]
+| polars sort-by month
+| polars collect
+```
+
+### Converting back to Nushell tables
+
+Use `polars into-nu` to convert a DataFrame back to a standard Nushell table for further processing with non-Polars commands:
+
+```nushell
+stars --dataframe
+| polars filter ((polars col language) == "Rust")
+| polars collect
+| polars into-nu
+| each { |row| $"($row.full_name): ($row.stargazers_count) stars" }
+```
+
+## Schema types
+
+When converting to Polars, the module maps columns to these Polars dtypes:
+
+| Column | Polars Type |
+|--------|-------------|
+| `id` | `i64` |
+| `owner`, `name`, `full_name`, `description`, `url` | `str` |
+| `language`, `homepage`, `license`, `topics` | `str` |
+| `stargazers_count`, `forks_count`, `open_issues_count`, `size` | `i64` |
+| `pushed_at`, `created_at`, `updated_at`, `synced_at`, `starred_at` | `datetime[us]` |
+| `archived`, `fork` | `bool` |
+
+<Aside type="caution">
+  The `topics` column is a JSON-encoded string (e.g., `["rust","cli"]`), not a Polars list. Use `polars str-json-decode` or convert with `polars into-nu` and parse with Nushell's `from json` if you need to work with individual topics.
+</Aside>

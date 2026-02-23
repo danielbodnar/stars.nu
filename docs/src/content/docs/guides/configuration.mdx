@@ -1,0 +1,140 @@
+---
+title: Configuration
+description: How to configure stars.nu with NUON config files.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Config file location
+
+Configuration is stored in NUON (Nushell Object Notation) format at:
+
+```
+$XDG_CONFIG_HOME/stars/config.nu
+```
+
+Typically: `~/.config/stars/config.nu`
+
+## Default configuration
+
+```nushell
+{
+    version: "3.0.0"
+    storage: {
+        db_path: null
+        backup_on_sync: false
+    }
+    defaults: {
+        filters: {
+            exclude_languages: [PHP, "C#", Java, Python, Ruby]
+            exclude_archived: true
+            exclude_forks: false
+            min_pushed_days: 365
+        }
+        columns: [owner, name, language, stars, pushed, homepage, topics, description, forks, issues]
+        sort_by: "stars"
+        sort_reverse: true
+    }
+    output: {
+        default_format: "table"
+        table: {
+            max_description_length: 80
+            clickable_links: true
+            colorize_languages: true
+        }
+    }
+    sync: {
+        sources: [github]
+        github: {
+            per_page: 100
+            cache_duration: "1h"
+            full_sync_interval_days: 7
+        }
+    }
+}
+```
+
+## Dot-notation access
+
+All config commands support dot notation for nested keys:
+
+```nushell
+# Read nested values
+stars config get defaults.sort_by
+stars config get defaults.filters.exclude_languages
+stars config get sync.github.cache_duration
+
+# Write nested values
+stars config set defaults.sort_by "pushed"
+stars config set sync.github.full_sync_interval_days 14
+```
+
+## Common customizations
+
+### Change sort order
+
+```nushell
+stars config set defaults.sort_by "pushed"
+stars config set defaults.sort_reverse true
+```
+
+Valid sort fields: `stars`, `forks`, `pushed`, `created`, `updated`, `name`, `language`, `owner`.
+
+### Modify excluded languages
+
+```nushell
+# See current exclusions
+stars config get defaults.filters.exclude_languages
+
+# Set a new list
+stars config set defaults.filters.exclude_languages [PHP, "C#"]
+```
+
+### Show archived repos by default
+
+```nushell
+stars config set defaults.filters.exclude_archived false
+```
+
+### Enable backup on sync
+
+```nushell
+stars config set storage.backup_on_sync true
+```
+
+### Change sync frequency
+
+```nushell
+# Full sync every 14 days instead of 7
+stars config set sync.github.full_sync_interval_days 14
+```
+
+### Customize displayed columns
+
+```nushell
+stars config set defaults.columns [owner, name, language, stars, description]
+```
+
+<Aside type="tip">
+  Changes take effect immediately — no restart needed. The config is read fresh on every command invocation.
+</Aside>
+
+## Validation
+
+After editing config manually, validate it:
+
+```nushell
+stars config validate
+```
+
+This checks for missing required sections and fields, reporting errors and warnings.
+
+## Resetting
+
+```nushell
+# Reset everything to defaults
+stars config reset
+
+# Reset only a specific section
+stars config reset --key defaults.filters
+```

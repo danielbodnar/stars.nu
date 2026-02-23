@@ -1,0 +1,89 @@
+---
+title: stars stats
+description: View statistics about your starred repositories.
+---
+
+## Usage
+
+```nushell
+stars stats
+```
+
+## Output
+
+Returns a record with summary statistics:
+
+```
+╭──────────────────┬─────────────────────────╮
+│ total_stars       │ 1247                    │
+│ unique_languages  │ 42                      │
+│ archived_repos    │ 31                      │
+│ forked_repos      │ 15                      │
+│ db_size_mb        │ 2.34                    │
+│ last_sync         │ 2026-02-23 10:15:00     │
+│ backup_count      │ 3                       │
+│ top_languages     │ [table 10 rows]         │
+│ top_owners        │ [table 10 rows]         │
+╰──────────────────┴─────────────────────────╯
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_stars` | `int` | Total number of starred repositories |
+| `unique_languages` | `int` | Number of distinct programming languages |
+| `archived_repos` | `int` | Number of archived repositories |
+| `forked_repos` | `int` | Number of forked repositories |
+| `db_size_mb` | `float` | SQLite database file size in megabytes |
+| `last_sync` | `datetime` | Last database modification time |
+| `backup_count` | `int` | Number of backup files |
+| `top_languages` | `table` | Top 10 languages by count |
+| `top_owners` | `table` | Top 10 repo owners by count |
+
+### Drilling into nested tables
+
+```nushell
+stars stats | get top_languages
+```
+
+```
+╭───┬────────────┬───────╮
+│ # │  language  │ count │
+├───┼────────────┼───────┤
+│ 0 │ Rust       │   187 │
+│ 1 │ TypeScript │   156 │
+│ 2 │ Go         │   134 │
+│ 3 │ JavaScript │    98 │
+│ 4 │ Shell      │    45 │
+│ …                      │
+╰───┴────────────┴───────╯
+```
+
+```nushell
+stars stats | get top_owners
+```
+
+```
+╭───┬──────────────┬───────╮
+│ # │    owner     │ count │
+├───┼──────────────┼───────┤
+│ 0 │ cloudflare   │    23 │
+│ 1 │ astral-sh    │    12 │
+│ 2 │ nushell      │    11 │
+│ …                        │
+╰───┴──────────────┴───────╯
+```
+
+## Combining with Nushell pipelines
+
+```nushell
+# Get just the total count
+stars stats | get total_stars
+
+# Top 5 languages
+stars stats | get top_languages | first 5
+
+# Check if a sync is needed
+stars stats | get last_sync
+```

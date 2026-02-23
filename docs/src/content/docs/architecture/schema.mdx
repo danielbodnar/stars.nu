@@ -1,0 +1,129 @@
+---
+title: Schema & Types
+description: The canonical star schema and type system.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Canonical star schema
+
+Defined in `core/types.nu`, the star schema is the unified format for all repository data regardless of source. Call `star-schema` to inspect it at runtime.
+
+### Fields
+
+| Field | Type | Nullable | Default | Description |
+|-------|------|----------|---------|-------------|
+| `id` | `int` | No | — | Unique identifier (GitHub repo ID) |
+| `owner` | `string` | No | — | Repository owner login |
+| `name` | `string` | No | — | Repository name |
+| `full_name` | `string` | No | — | Full name (`owner/name`) |
+| `description` | `string` | Yes | — | Repository description |
+| `url` | `string` | No | — | HTML URL to repository |
+| `homepage` | `string` | Yes | — | Project homepage URL |
+| `language` | `string` | Yes | — | Primary programming language |
+| `topics` | `list<string>` | No | `[]` | Repository topics/tags |
+| `stars` | `int` | No | `0` | Stargazer count |
+| `forks` | `int` | No | `0` | Fork count |
+| `issues` | `int` | No | `0` | Open issue count |
+| `pushed` | `datetime` | Yes | — | Last push timestamp |
+| `created` | `datetime` | Yes | — | Creation timestamp |
+| `updated` | `datetime` | Yes | — | Last update timestamp |
+| `archived` | `bool` | No | `false` | Whether repo is archived |
+| `fork` | `bool` | No | `false` | Whether repo is a fork |
+| `license` | `string` | Yes | — | License name (e.g., "MIT") |
+| `readme_excerpt` | `string` | Yes | — | Excerpt from README |
+| `source` | `string` | No | `"github"` | Data source identifier |
+| `synced_at` | `datetime` | No | — | When this record was last synced |
+| `starred_at` | `datetime` | Yes | — | When the user starred this repo |
+
+**Required fields**: `id`, `owner`, `name`, `full_name`, `url`, `source`, `synced_at`
+
+## SQLite gotchas
+
+<Aside type="caution" title="Boolean columns are integers">
+  SQLite has no native boolean type. The `archived` and `fork` columns are stored as integers (`0` or `1`). When reading from the database, always handle both representations:
+
+  ```nushell
+  let is_archived = if ($val | describe) == "bool" { $val } else { $val == 1 }
+  ```
+</Aside>
+
+<Aside type="caution" title="Topics are JSON strings">
+  The `topics` column is stored as a JSON-encoded string (e.g., `["rust","cli"]`), not a Nushell list. Parse before list operations:
+
+  ```nushell
+  let topics = $repo.topics | from json
+  ```
+
+  The `parse-topics` helper in `core/types.nu` handles both string and list formats transparently.
+</Aside>
+
+## Schema differences: types.nu vs. GitHub adapter
+
+The canonical schema in `core/types.nu` uses friendly field names (`stars`, `forks`, `pushed`), while the GitHub adapter preserves GitHub's API field names (`stargazers_count`, `forks_count`, `pushed_at`). The database stores the GitHub field names because that's what `into sqlite` receives from the adapter.
+
+| types.nu (canonical) | Database (from adapter) |
+|---------------------|------------------------|
+| `stars` | `stargazers_count` |
+| `forks` | `forks_count` |
+| `issues` | `open_issues_count` |
+| `pushed` | `pushed_at` |
+| `created` | `created_at` |
+| `updated` | `updated_at` |
+| `url` | `html_url` |
+
+The `sort-data` function in `mod.nu` maps friendly names to actual column names:
+
+```nushell
+let sort_field = match $sort_by {
+    "stars" => "stargazers_count"
+    "forks" => "forks_count"
+    "pushed" => "pushed_at"
+    ...
+}
+```
+
+## Validation
+
+Use `validate-star` to check a record against the schema:
+
+```nushell
+let result = validate-star $record
+# => {valid: true, errors: [], warnings: []}
+```
+
+The validator checks:
+- All required fields are present
+- `id` is an integer
+- `owner`, `name`, `full_name`, `url` are strings
+- `source` is one of: `github`, `firefox`, `chrome`, `awesome`, `manual`
+- Numeric fields (`stars`, `forks`, `issues`) are integers
+- Boolean fields (`archived`, `fork`) are booleans
+- `topics` is a list or JSON string
+- `url` starts with `http`
+
+## Polars schema
+
+For Polars DataFrame/LazyFrame conversion, `polars-schema` defines the column-to-dtype mapping:
+
+```nushell
+polars-schema
+# => {id: "i64", owner: "str", name: "str", ..., starred_at: "datetime[us]"}
+```
+
+## Helper functions
+
+| Function | Description |
+|----------|-------------|
+| `star-schema` | Returns the full schema definition |
+| `polars-schema` | Returns Polars dtype mappings |
+| `default-columns` | Default display columns |
+| `minimal-columns` | Compact display columns |
+| `all-columns` | All available columns |
+| `excluded-languages` | Default language exclusion list |
+| `valid-sources` | Valid source identifiers |
+| `parse-topics` | Parse topics from JSON string or list |
+| `get-owner-login` | Extract owner login from various formats |
+| `validate-star` | Validate a record against the schema |
+| `normalize-github-star` | Transform GitHub API response to schema |
+| `empty-star` | Create a record with all default values |

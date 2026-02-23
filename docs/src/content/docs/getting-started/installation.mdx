@@ -1,0 +1,73 @@
+---
+title: Installation
+description: How to install the stars.nu module and its dependencies.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+## Prerequisites
+
+- **Nushell 0.110.0+** — the module uses features from recent Nushell releases
+- **`gh` CLI** — GitHub's official CLI, used for API access
+- **`nu_plugin_polars`** *(optional)* — only needed for `--dataframe` / `--lazyframe` output
+
+## Install the module
+
+<Steps>
+
+1. **Clone the repository** into your Nushell modules directory:
+
+   ```nushell
+   git clone https://github.com/danielbodnar/stars.nu ~/.config/nushell/modules/stars
+   ```
+
+   Or wherever you keep Nushell modules. The path just needs to be accessible via `use`.
+
+2. **Authenticate with GitHub** using the `gh` CLI:
+
+   ```nushell
+   gh auth login
+   ```
+
+   Follow the prompts to authenticate. The module uses `gh api` under the hood, so it inherits your `gh` authentication.
+
+3. **Load the module** in your Nushell session:
+
+   ```nushell
+   use ~/.config/nushell/modules/stars *
+   ```
+
+   To load it automatically, add that line to your `config.nu` or `env.nu`.
+
+</Steps>
+
+<Aside type="tip">
+  If you cloned to a different path, adjust the `use` statement accordingly. The glob import (`*`) makes all subcommands available as top-level `stars *` commands.
+</Aside>
+
+## Optional: Polars plugin
+
+For DataFrame/LazyFrame output (used with `--dataframe` and `--lazyframe` flags):
+
+```nushell
+cargo install nu_plugin_polars
+plugin add ~/.cargo/bin/nu_plugin_polars
+```
+
+After installing, restart Nushell or run `plugin use polars`.
+
+## Verify installation
+
+```nushell
+stars version
+```
+
+You should see output like:
+
+```
+╭─────────┬────────────────╮
+│ version │ 3.0.0          │
+│ nushell │ 0.110.0        │
+│ polars  │ not installed  │
+╰─────────┴────────────────╯
+```

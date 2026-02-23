@@ -1,0 +1,125 @@
+---
+title: stars config
+description: Manage stars.nu configuration settings.
+---
+
+The config commands manage your `stars.nu` settings, stored in NUON format at `$XDG_CONFIG_HOME/stars/config.nu`.
+
+## stars config
+
+Shows the current configuration as a Nushell record.
+
+```nushell
+stars config
+stars config --json
+```
+
+## init
+
+Creates a configuration file with default values.
+
+```nushell
+stars config init
+stars config init --force  # overwrite existing
+```
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Overwrite existing configuration file |
+
+## show
+
+Alias for `stars config`. Shows the current configuration.
+
+```nushell
+stars config show
+stars config show --json
+```
+
+## get
+
+Retrieves a specific value using dot notation for nested keys.
+
+```nushell
+stars config get version
+# => "3.0.0"
+
+stars config get defaults.columns
+# => [owner, name, language, stars, pushed, homepage, topics, description, forks, issues]
+
+stars config get defaults.filters.exclude_languages
+# => [PHP, C#, Java, Python, Ruby]
+
+stars config get sync.github.per_page
+# => 100
+
+stars config get output.table.clickable_links
+# => true
+```
+
+## set
+
+Sets a value using dot notation. Creates intermediate keys if they don't exist.
+
+```nushell
+stars config set defaults.sort_by "pushed"
+
+stars config set output.table.max_description_length 120
+
+stars config set defaults.filters.exclude_archived false
+
+stars config set sync.github.full_sync_interval_days 14
+```
+
+## reset
+
+Resets configuration to defaults. Optionally reset only a specific key.
+
+```nushell
+# Reset everything
+stars config reset
+
+# Reset only the filters section
+stars config reset --key defaults.filters
+```
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--key` | `string` | Specific key to reset (dot notation). Resets all if omitted. |
+
+## edit
+
+Opens the configuration file in your editor (`$EDITOR` or `$VISUAL`, defaults to `nvim`). Creates a default config first if none exists.
+
+```nushell
+stars config edit
+```
+
+## path
+
+Returns the path to the configuration file.
+
+```nushell
+stars config path
+# => /home/user/.config/stars/config.nu
+```
+
+## validate
+
+Checks the configuration for structural issues and reports errors/warnings.
+
+```nushell
+stars config validate
+```
+
+Returns a record:
+
+```
+╭──────────┬──────────────────────╮
+│ valid    │ true                 │
+│ errors   │ []                   │
+│ warnings │ []                   │
+╰──────────┴──────────────────────╯
+```
+
+Checks for: `version` field, `storage` section, `defaults` section (with `columns` and `filters`), `output` section, and `sync` section.

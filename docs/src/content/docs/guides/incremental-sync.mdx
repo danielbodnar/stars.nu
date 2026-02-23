@@ -1,0 +1,80 @@
+---
+title: Incremental Sync
+description: How stars.nu efficiently syncs only new stars.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## How it works
+
+After your first full sync, `stars sync` defaults to **incremental mode**. Instead of re-fetching every star, it only retrieves stars you've added since the last sync.
+
+### The mechanism
+
+1. The module stores `last_synced_at` in the `sync_metadata` SQLite table
+2. On sync, it requests stars sorted by `created` (newest first) using the `star+json` API format
+3. Each page of results is checked: if the oldest `starred_at` timestamp on a page is older than `last_synced_at`, fetching stops
+4. Only stars newer than `last_synced_at` are kept from the final page
+5. New stars are **upserted** into the existing database (matched by `id`)
+
+### Performance comparison
+
+| Scenario | Pages fetched | Time |
+|----------|--------------|------|
+| Full sync (1,200 stars) | ~12 pages | ~15 seconds |
+| Incremental sync (3 new stars) | 1 page | ~1 second |
+| Incremental sync (0 new stars) | 1 page | ~1 second |
+
+<Aside type="note">
+  Even with zero new stars, one API page is always fetched to check. The `gh api --cache` option (enabled by default) ensures this is fast for repeated checks.
+</Aside>
+
+## Auto-escalation to full sync
+
+The module automatically performs a full sync when:
+
+- **First run** — no `last_synced_at` metadata exists
+- **Explicit request** — `--full` flag is passed
+- **Stale full sync** — `last_full_sync_at` is older than `full_sync_interval_days` (default: 7)
+
+The full sync interval is configurable:
+
+```nushell
+stars config set sync.github.full_sync_interval_days 14
+```
+
+## Sync metadata
+
+Two metadata keys track sync state:
+
+| Key | Description |
+|-----|-------------|
+| `last_synced_at` | ISO-8601 timestamp of the most recent sync (full or incremental) |
+| `last_full_sync_at` | ISO-8601 timestamp of the most recent full sync |
+
+These are stored in the `sync_metadata` table alongside your stars in the same SQLite file.
+
+## starred_at timestamps
+
+The GitHub API provides `starred_at` timestamps when you request the `application/vnd.github.star+json` Accept header. This tells you **when you starred** a repo (not when the repo was created or updated).
+
+The module always uses this header, which wraps each repo in an envelope:
+
+```json
+{
+  "starred_at": "2026-02-20T14:30:00Z",
+  "repo": { ... }
+}
+```
+
+This is what enables efficient incremental sync — stars are sorted by when you starred them, so we can stop paginating once we reach already-synced entries.
+
+## Edge cases
+
+**Unstarred repos**: The current incremental sync does not detect repos you've unstarred. To clean those up, run a full sync:
+
+```nushell
+stars sync --full
+```
+
+**Re-starred repos**: If you unstar and re-star a repo, the `starred_at` timestamp resets. The incremental sync will pick it up again as a "new" star and upsert it.

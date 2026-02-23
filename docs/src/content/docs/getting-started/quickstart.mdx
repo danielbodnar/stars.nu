@@ -1,0 +1,63 @@
+---
+title: Quick Start
+description: Get up and running with stars.nu in under 5 minutes.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+A five-minute walkthrough from zero to browsing your starred repos.
+
+<Steps>
+
+1. **Load the module**
+
+   ```nushell
+   use ~/.config/nushell/modules/stars *
+   ```
+
+2. **Sync your GitHub stars**
+
+   ```nushell
+   stars sync
+   ```
+
+   This fetches all your starred repositories from GitHub and stores them in a local SQLite database. The first sync fetches everything; subsequent syncs are incremental.
+
+3. **Browse your stars**
+
+   ```nushell
+   stars
+   ```
+
+   Displays a formatted table with owner, name, language, stars, last push date, and more.
+
+4. **Search for something**
+
+   ```nushell
+   stars "rust cli"
+   ```
+
+   Searches across repo names, descriptions, and topics.
+
+5. **Export to a file**
+
+   ```nushell
+   stars export json --pretty
+   ```
+
+   Saves a JSON file to `$XDG_DATA_HOME/.stars/exports/`.
+
+</Steps>
+
+## What just happened?
+
+- `stars sync` called the GitHub API via `gh api`, paginated through all your stars, and stored them in `~/.local/share/.stars/stars.db`
+- `stars` loaded the SQLite database, applied default filters (excluding archived repos, stale repos, and certain languages), sorted by star count, and rendered a table
+- `stars "rust cli"` did the same but additionally filtered to repos matching your query
+- `stars export json` wrote the full dataset to a timestamped JSON file
+
+## Next steps
+
+- [Configure default filters](/guides/filters/) to customize what shows up
+- [Learn about incremental sync](/guides/incremental-sync/) to understand how updates work
+- [Explore all commands](/commands/overview/) for the full feature set

@@ -1,0 +1,108 @@
+---
+title: Storage Layer
+description: SQLite persistence, XDG paths, backups, and migration.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Storage paths
+
+All paths follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/):
+
+| Path | Purpose |
+|------|---------|
+| `$XDG_DATA_HOME/.stars/stars.db` | SQLite database (main storage) |
+| `$XDG_DATA_HOME/.stars/backups/` | Timestamped `.db` backup copies |
+| `$XDG_DATA_HOME/.stars/exports/` | Export output files |
+| `$XDG_CONFIG_HOME/stars/config.nu` | NUON configuration file |
+
+`$XDG_DATA_HOME` defaults to `~/.local/share` and `$XDG_CONFIG_HOME` defaults to `~/.config`.
+
+## Database schema
+
+The `stars.db` file contains two tables:
+
+### `stars` table
+
+Created implicitly by Nushell's `into sqlite` command. Columns mirror the normalized star schema from `core/types.nu`. See the [SQLite Schema reference](/reference/sqlite-schema/) for the full column list.
+
+### `sync_metadata` table
+
+Tracks sync state for incremental sync:
+
+```sql
+CREATE TABLE sync_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+```
+
+Currently stores:
+
+| Key | Value | Description |
+|-----|-------|-------------|
+| `last_synced_at` | ISO-8601 datetime | When any sync last completed |
+| `last_full_sync_at` | ISO-8601 datetime | When the last full sync completed |
+
+## Operations
+
+### Loading data
+
+```nushell
+# Internal: core/storage.nu
+load  # → SELECT * FROM stars ORDER BY stargazers_count DESC
+```
+
+Returns a standard Nushell table. All filtering, searching, and sorting happens in Nushell after loading.
+
+### Storing data
+
+```nushell
+# Full replacement (used for first sync or --full)
+store $data --replace  # deletes DB, writes fresh
+
+# Upsert (used for incremental sync)
+upsert $data  # merges by id, preserving existing records
+```
+
+<Aside type="note">
+  The `store` function with `--replace` deletes the entire database file and recreates it. The `upsert` function loads existing data, filters out records whose IDs appear in the new data, appends the new data, and rewrites the whole file. This is simple but works well for the typical dataset size (hundreds to low thousands of repos).
+</Aside>
+
+### Backups
+
+```nushell
+backup  # → copies stars.db to backups/stars_YYYYMMDD_HHMMSS.db
+```
+
+Backups are plain copies of the SQLite file. They can be restored by copying back:
+
+```nushell
+let paths = get-paths
+cp $"($paths.backup_dir)/stars_20260223_150000.db" $paths.db_path
+```
+
+## Directory initialization
+
+The `ensure-storage` function creates all required directories on first use:
+
+1. Base directory: `$XDG_DATA_HOME/.stars/`
+2. Backup directory: `$XDG_DATA_HOME/.stars/backups/`
+3. Export directory: `$XDG_DATA_HOME/.stars/exports/`
+4. Runs `ALTER TABLE stars ADD COLUMN starred_at TEXT` if the column is missing (for databases created before incremental sync support)
+5. Creates the `sync_metadata` table if it doesn't exist
+
+## Migration
+
+On first use, `mod.nu` checks for a legacy `gh-stars` database and migrates it:
+
+- **Old path**: `$XDG_DATA_HOME/gh-stars/stars.db`
+- **New path**: `$XDG_DATA_HOME/.stars/stars.db`
+
+The migration:
+1. Loads all records from the old database
+2. Adds `source: "github"` and `synced_at` columns if missing
+3. Writes to the new location
+4. Preserves the old database (does not delete it)
+
+See [Migration from gh-stars](/reference/migration/) for details.

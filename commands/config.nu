@@ -61,7 +61,7 @@ def get-default-config []: nothing -> record {
         output: {
             default_format: "table"
             table: {
-                max_description_length: 80
+                max_description_length: 240
                 clickable_links: true
                 colorize_languages: true
             }

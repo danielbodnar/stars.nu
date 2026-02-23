@@ -1,0 +1,4 @@
+# docs site
+docs/node_modules/
+docs/dist/
+docs/.astro/
