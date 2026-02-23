@@ -9,7 +9,7 @@
 # with large datasets.
 #
 # # Dependencies
-# - Nushell 0.100.0+
+# - Nushell 0.110.0+
 # - Polars plugin (nu_plugin_polars)
 #
 # # Usage
@@ -83,7 +83,7 @@ export def load-lazy []: nothing -> any {
         error make {
             msg: "Polars plugin not available"
             label: { text: "Install nu_plugin_polars and register it", span: (metadata $in).span }
-            help: "Run: plugin add nu_plugin_polars && plugin use polars"
+            help: "Run: plugin add nu_plugin_polars; plugin use polars"
         }
     }
 

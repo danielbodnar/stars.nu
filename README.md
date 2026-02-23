@@ -57,6 +57,6 @@ stars.nu/
 
 ## Requirements
 
-- Nushell 0.107+
+- Nushell 0.110.0+
 - `GITHUB_TOKEN` environment variable (for syncing)
 - SQLite (bundled with Nushell)

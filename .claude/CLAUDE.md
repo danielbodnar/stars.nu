@@ -136,7 +136,7 @@ Use `--no-defaults` to skip these filters.
 
 ## Dependencies
 
-- **Nushell 0.100.0+**
+- **Nushell 0.110.0+**
 - **gh CLI** (authenticated)
 - **nu_plugin_polars** (optional, for DataFrame operations)
 
