@@ -54,6 +54,7 @@ export def star-schema []: nothing -> record {
             readme_excerpt: { type: string, nullable: true, description: "Excerpt from README for search" }
             source: { type: string, nullable: false, default: "github", description: "Data source: github|firefox|chrome|awesome|manual" }
             synced_at: { type: datetime, nullable: false, description: "When this record was last synced" }
+            starred_at: { type: datetime, nullable: true, description: "When the user starred this repo (from GitHub star+json)" }
         }
         required: [id, owner, name, full_name, url, source, synced_at]
         version: "1.0.0"
@@ -89,6 +90,7 @@ export def polars-schema []: nothing -> record {
         readme_excerpt: "str"
         source: "str"
         synced_at: "datetime[us]"
+        starred_at: "datetime[us]"
     }
 }
 
@@ -120,7 +122,7 @@ export def all-columns []: nothing -> list<string> {
     [
         id, owner, name, full_name, description, url, homepage, language,
         topics, stars, forks, issues, pushed, created, updated, archived,
-        fork, license, readme_excerpt, source, synced_at
+        fork, license, readme_excerpt, source, synced_at, starred_at
     ]
 }
 
@@ -394,6 +396,7 @@ export def normalize-github-star [raw: record]: nothing -> record {
         readme_excerpt: null
         source: "github"
         synced_at: (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+        starred_at: null
     }
 }
 
@@ -426,5 +429,6 @@ export def empty-star []: nothing -> record {
         readme_excerpt: null
         source: "manual"
         synced_at: (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+        starred_at: null
     }
 }

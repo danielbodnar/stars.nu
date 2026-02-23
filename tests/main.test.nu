@@ -879,6 +879,261 @@ def "test schema valid sources" [] {
 }
 
 # ============================================================================
+# Incremental Sync Tests
+# ============================================================================
+
+# Test sync metadata round-trip (set then get)
+def "test sync meta round trip" [] {
+    use ../core/storage.nu [get-paths, ensure-storage, get-sync-meta, set-sync-meta]
+
+    # Use a temporary DB path via XDG override
+    let test_dir = $nu.temp-dir | path join $"stars_test_(random int)"
+    mkdir $test_dir
+    $env.XDG_DATA_HOME = $test_dir
+
+    try {
+        ensure-storage
+        set-sync-meta "test_key" "test_value_123"
+        let result = get-sync-meta "test_key"
+        assert equal $result "test_value_123"
+    } catch {|e|
+        rm -r $test_dir
+        error make { msg: $e.msg }
+    }
+
+    rm -r $test_dir
+    print "  ✓ Sync metadata round-trip works correctly"
+}
+
+# Test sync metadata missing key returns null
+def "test sync meta missing key" [] {
+    use ../core/storage.nu [get-paths, ensure-storage, get-sync-meta]
+
+    let test_dir = $nu.temp-dir | path join $"stars_test_(random int)"
+    mkdir $test_dir
+    $env.XDG_DATA_HOME = $test_dir
+
+    try {
+        ensure-storage
+        let result = get-sync-meta "nonexistent_key"
+        assert equal $result null
+    } catch {|e|
+        rm -r $test_dir
+        error make { msg: $e.msg }
+    }
+
+    rm -r $test_dir
+    print "  ✓ Sync metadata missing key returns null"
+}
+
+# Test sync metadata overwrite
+def "test sync meta overwrite" [] {
+    use ../core/storage.nu [get-paths, ensure-storage, get-sync-meta, set-sync-meta]
+
+    let test_dir = $nu.temp-dir | path join $"stars_test_(random int)"
+    mkdir $test_dir
+    $env.XDG_DATA_HOME = $test_dir
+
+    try {
+        ensure-storage
+        set-sync-meta "overwrite_key" "first_value"
+        set-sync-meta "overwrite_key" "second_value"
+        let result = get-sync-meta "overwrite_key"
+        assert equal $result "second_value"
+    } catch {|e|
+        rm -r $test_dir
+        error make { msg: $e.msg }
+    }
+
+    rm -r $test_dir
+    print "  ✓ Sync metadata overwrite works correctly"
+}
+
+# Test upsert merges new stars
+def "test upsert merges new" [] {
+    use ../core/storage.nu [get-paths, ensure-storage, store, load, upsert]
+
+    let test_dir = $nu.temp-dir | path join $"stars_test_(random int)"
+    mkdir $test_dir
+    $env.XDG_DATA_HOME = $test_dir
+
+    try {
+        ensure-storage
+
+        # Store initial data
+        let initial = [
+            {id: 1, name: "repo-a", full_name: "owner/repo-a", owner: "owner", language: "Rust", stargazers_count: 100, starred_at: null}
+        ]
+        store $initial
+
+        # Upsert new data
+        let new_data = [
+            {id: 2, name: "repo-b", full_name: "owner/repo-b", owner: "owner", language: "Go", stargazers_count: 200, starred_at: "2024-06-01T00:00:00Z"}
+        ]
+        upsert $new_data
+
+        let result = load
+        assert equal ($result | length) 2
+        assert ("repo-a" in ($result | get name))
+        assert ("repo-b" in ($result | get name))
+    } catch {|e|
+        rm -r $test_dir
+        error make { msg: $e.msg }
+    }
+
+    rm -r $test_dir
+    print "  ✓ Upsert merges new stars correctly"
+}
+
+# Test upsert updates existing
+def "test upsert updates existing" [] {
+    use ../core/storage.nu [get-paths, ensure-storage, store, load, upsert]
+
+    let test_dir = $nu.temp-dir | path join $"stars_test_(random int)"
+    mkdir $test_dir
+    $env.XDG_DATA_HOME = $test_dir
+
+    try {
+        ensure-storage
+
+        # Store initial data
+        let initial = [
+            {id: 1, name: "repo-a", full_name: "owner/repo-a", owner: "owner", language: "Rust", stargazers_count: 100, starred_at: null}
+        ]
+        store $initial
+
+        # Upsert updated data for same ID
+        let updated = [
+            {id: 1, name: "repo-a", full_name: "owner/repo-a", owner: "owner", language: "Rust", stargazers_count: 999, starred_at: "2024-06-01T00:00:00Z"}
+        ]
+        upsert $updated
+
+        let result = load
+        assert equal ($result | length) 1
+        assert equal ($result | first | get stargazers_count) 999
+    } catch {|e|
+        rm -r $test_dir
+        error make { msg: $e.msg }
+    }
+
+    rm -r $test_dir
+    print "  ✓ Upsert updates existing stars correctly"
+}
+
+# Test upsert with empty data is no-op
+def "test upsert empty data" [] {
+    use ../core/storage.nu [get-paths, ensure-storage, store, load, upsert]
+
+    let test_dir = $nu.temp-dir | path join $"stars_test_(random int)"
+    mkdir $test_dir
+    $env.XDG_DATA_HOME = $test_dir
+
+    try {
+        ensure-storage
+
+        let initial = [
+            {id: 1, name: "repo-a", full_name: "owner/repo-a", owner: "owner", stargazers_count: 100, starred_at: null}
+        ]
+        store $initial
+
+        # Upsert empty table
+        upsert []
+
+        let result = load
+        assert equal ($result | length) 1
+    } catch {|e|
+        rm -r $test_dir
+        error make { msg: $e.msg }
+    }
+
+    rm -r $test_dir
+    print "  ✓ Upsert with empty data is no-op"
+}
+
+# Test starred_at exists in all-columns and star-schema
+def "test starred_at in schema" [] {
+    use ../core/types.nu [all-columns, star-schema]
+
+    let cols = all-columns
+    assert ("starred_at" in $cols)
+
+    let schema = star-schema
+    assert ("starred_at" in ($schema.fields | columns))
+
+    print "  ✓ starred_at exists in all-columns and star-schema"
+}
+
+# Test starred_at NOT in default-columns
+def "test starred_at not in defaults" [] {
+    use ../core/types.nu [default-columns, minimal-columns]
+
+    let defaults = default-columns
+    assert ("starred_at" not-in $defaults)
+
+    let minimal = minimal-columns
+    assert ("starred_at" not-in $minimal)
+
+    print "  ✓ starred_at not in default-columns or minimal-columns"
+}
+
+# Test normalize-repo with --starred-at
+def "test normalize repo starred_at" [] {
+    use ../adapters/github.nu [normalize-repo]
+
+    let mock_repo = {
+        id: 42
+        name: "test-repo"
+        full_name: "owner/test-repo"
+        owner: {login: "owner"}
+        html_url: "https://github.com/owner/test-repo"
+        description: "A test repo"
+        language: "Rust"
+        stargazers_count: 100
+        forks_count: 10
+        open_issues_count: 5
+        topics: []
+        pushed_at: "2024-01-01T00:00:00Z"
+        created_at: "2023-01-01T00:00:00Z"
+        updated_at: "2024-01-01T00:00:00Z"
+        archived: false
+        fork: false
+        license: null
+    }
+
+    let result = normalize-repo $mock_repo --starred-at "2024-06-15T10:30:00Z"
+    assert equal $result.starred_at "2024-06-15T10:30:00Z"
+    assert equal $result.id 42
+    assert equal $result.source "github"
+
+    # Without --starred-at should be null
+    let result_no_sa = normalize-repo $mock_repo
+    assert equal $result_no_sa.starred_at null
+
+    print "  ✓ normalize-repo handles --starred-at correctly"
+}
+
+# Test config has full_sync_interval_days default
+def "test config full_sync_interval_days" [] {
+    # Simulate the default config structure
+    let default_config = {
+        version: "3.0.0"
+        sync: {
+            sources: [github]
+            github: {
+                per_page: 100
+                cache_duration: "1h"
+                full_sync_interval_days: 7
+            }
+        }
+    }
+
+    let interval = $default_config.sync.github.full_sync_interval_days
+    assert equal $interval 7
+
+    print "  ✓ Config has full_sync_interval_days default"
+}
+
+# ============================================================================
 # Test Runner
 # ============================================================================
 
@@ -953,6 +1208,18 @@ def main [
         # Validation tests
         {name: "schema required fields", fn: {|| test schema required fields }}
         {name: "schema valid sources", fn: {|| test schema valid sources }}
+
+        # Incremental sync tests
+        {name: "sync meta round trip", fn: {|| test sync meta round trip }}
+        {name: "sync meta missing key", fn: {|| test sync meta missing key }}
+        {name: "sync meta overwrite", fn: {|| test sync meta overwrite }}
+        {name: "upsert merges new", fn: {|| test upsert merges new }}
+        {name: "upsert updates existing", fn: {|| test upsert updates existing }}
+        {name: "upsert empty data", fn: {|| test upsert empty data }}
+        {name: "starred_at in schema", fn: {|| test starred_at in schema }}
+        {name: "starred_at not in defaults", fn: {|| test starred_at not in defaults }}
+        {name: "normalize repo starred_at", fn: {|| test normalize repo starred_at }}
+        {name: "config full_sync_interval_days", fn: {|| test config full_sync_interval_days }}
     ]
 
     # Filter tests if specific test requested

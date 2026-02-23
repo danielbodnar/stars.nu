@@ -71,6 +71,7 @@ def get-default-config []: nothing -> record {
             github: {
                 per_page: 100
                 cache_duration: "1h"
+                full_sync_interval_days: 7
             }
         }
     }

@@ -74,6 +74,75 @@ export def ensure-storage []: nothing -> nothing {
     ensure-directory $base_dir
     ensure-directory $paths.backup_dir
     ensure-directory $paths.export_dir
+
+    # Migrate: add starred_at column if missing
+    if ($paths.db_path | path exists) {
+        try { open $paths.db_path | query db "ALTER TABLE stars ADD COLUMN starred_at TEXT" } catch { }
+    }
+
+    ensure-sync-metadata
+}
+
+# Ensure sync_metadata table exists in the database
+#
+# If the DB file doesn't exist yet, creates it by seeding with a temporary
+# table via `into sqlite`, then sets up the proper sync_metadata schema.
+def ensure-sync-metadata []: nothing -> nothing {
+    let paths = get-paths
+    ensure-directory ($paths.db_path | path dirname)
+
+    if not ($paths.db_path | path exists) {
+        # Bootstrap the SQLite file with a seed table, then recreate with proper schema
+        try {
+            [{key: "__init__", value: ""}] | into sqlite $paths.db_path --table-name _bootstrap
+            open $paths.db_path | query db "DROP TABLE _bootstrap"
+            open $paths.db_path | query db "CREATE TABLE sync_metadata (key TEXT PRIMARY KEY, value TEXT)"
+        } catch { return }
+    } else {
+        try {
+            open $paths.db_path | query db "CREATE TABLE IF NOT EXISTS sync_metadata (key TEXT PRIMARY KEY, value TEXT)"
+        } catch { }
+    }
+}
+
+# ============================================================================
+# Sync Metadata Operations
+# ============================================================================
+
+# Read a sync metadata value by key
+#
+# Returns the value for the given key, or null if not found.
+#
+# Parameters:
+#   key: string - The metadata key to look up
+#
+# Example:
+#   get-sync-meta "last_synced_at"
+export def get-sync-meta [key: string]: nothing -> any {
+    let paths = get-paths
+    if not ($paths.db_path | path exists) { return null }
+    ensure-sync-metadata
+    try {
+        let result = open $paths.db_path | query db $"SELECT value FROM sync_metadata WHERE key = '($key)'"
+        if ($result | is-empty) { null } else { $result | first | get value }
+    } catch { null }
+}
+
+# Write a sync metadata value
+#
+# Inserts or replaces the value for the given key in sync_metadata.
+#
+# Parameters:
+#   key: string - The metadata key
+#   value: string - The value to store
+#
+# Example:
+#   set-sync-meta "last_synced_at" "2024-01-15T10:00:00Z"
+export def set-sync-meta [key: string, value: string]: nothing -> nothing {
+    let paths = get-paths
+    ensure-storage
+    ensure-sync-metadata
+    open $paths.db_path | query db $"INSERT OR REPLACE INTO sync_metadata \(key, value\) VALUES \('($key)', '($value)'\)"
 }
 
 # ============================================================================
@@ -154,6 +223,65 @@ export def store [
             help: "Check that the data has valid columns and types"
         }
     }
+}
+
+# Upsert stars into existing database (merge new/updated)
+#
+# Merges new star data with existing data. New records are appended,
+# existing records (matched by id) are replaced with the new data.
+# If the database doesn't exist, falls back to store.
+#
+# Parameters:
+#   data: table - Star data to upsert
+#
+# Example:
+#   $new_stars | upsert
+export def upsert [data: table]: nothing -> nothing {
+    let paths = get-paths
+
+    if ($data | is-empty) { return }
+
+    if not ($paths.db_path | path exists) {
+        store $data
+        return
+    }
+
+    let new_ids = $data | get id
+    let existing = load | where { ($in.id | default 0) not-in $new_ids }
+
+    # Ensure starred_at column exists in existing data
+    let existing = if "starred_at" not-in ($existing | columns) {
+        $existing | insert starred_at null
+    } else { $existing }
+
+    let merged = $existing | append $data
+    store $merged --replace
+}
+
+# Remove stars no longer in the keep list
+#
+# For full sync, identifies repos that were unstarred since last sync
+# and removes them. Returns the count of removed entries.
+#
+# Parameters:
+#   keep_ids: list<int> - IDs of repos to keep
+#
+# Example:
+#   let removed = remove-unstarred $current_ids
+export def remove-unstarred [keep_ids: list<int>]: nothing -> int {
+    let paths = get-paths
+    if not ($paths.db_path | path exists) { return 0 }
+
+    let existing = load
+    let to_remove = $existing | where { ($in.id | default 0) not-in $keep_ids }
+    let count = $to_remove | length
+
+    if $count > 0 {
+        let kept = $existing | where { ($in.id | default 0) in $keep_ids }
+        store $kept --replace
+    }
+
+    $count
 }
 
 # ============================================================================

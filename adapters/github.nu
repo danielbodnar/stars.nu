@@ -30,11 +30,12 @@ def fetch-page [
     url: string
     use_cache: bool
     cache_duration: string
+    accept_header: string = "application/vnd.github+json"
 ]: nothing -> list {
     let result = if $use_cache {
-        gh api $url --cache $cache_duration | complete
+        gh api $url --cache $cache_duration --header $"Accept: ($accept_header)" | complete
     } else {
-        gh api $url | complete
+        gh api $url --header $"Accept: ($accept_header)" | complete
     }
 
     if $result.exit_code != 0 {
@@ -77,8 +78,15 @@ def fetch-page [
 #   page_data: list - Raw list of repository objects from GitHub API
 def process-page [
     page_data: list
+    --starred           # Whether data is in star+json envelope format
 ]: nothing -> list {
-    $page_data | each {|repo| normalize-repo $repo }
+    if $starred {
+        $page_data | each {|item|
+            normalize-repo ($item.repo? | default $item) --starred-at ($item.starred_at? | default null)
+        }
+    } else {
+        $page_data | each {|repo| normalize-repo $repo }
+    }
 }
 
 # Extract owner login from owner object or string
@@ -143,6 +151,7 @@ def parse-topics [topics: any]: nothing -> string {
 #   $api_response | each {|r| normalize-repo $r }
 export def normalize-repo [
     repo: record
+    --starred-at: string   # From star+json envelope: when the user starred this repo
 ]: nothing -> record {
     let synced_at = date now | format date "%Y-%m-%dT%H:%M:%SZ"
 
@@ -175,6 +184,7 @@ export def normalize-repo [
         default_branch: ($repo.default_branch? | default "main")
         source: "github"
         synced_at: $synced_at
+        starred_at: ($starred_at | default null)
     }
 }
 
@@ -199,10 +209,11 @@ export def normalize-repo [
 #   # Fetch stars for a specific user
 #   fetch --user danielbodnar
 export def fetch [
-    --user (-u): string         # GitHub username (default: authenticated user)
-    --per-page: int = 100       # Items per page (max 100)
-    --use-cache                 # Use gh api cache
+    --user (-u): string              # GitHub username (default: authenticated user)
+    --per-page: int = 100            # Items per page (max 100)
+    --use-cache                      # Use gh api cache
     --cache-duration: string = "1h"  # Cache duration (e.g., "1h", "30m")
+    --since: string = ""             # ISO-8601 datetime; stop fetching pages older than this
 ]: nothing -> table {
     # Validate per-page (GitHub max is 100)
     let page_size = [$per_page 100] | math min
@@ -214,13 +225,16 @@ export def fetch [
         $"users/($user)/starred"
     }
 
+    # Always use star+json to get starred_at timestamps and sort newest-first
+    let accept = "application/vnd.github.star+json"
+
     # Use generate for pagination
     let results = generate {|state|
-        let url = $"($base_url)?per_page=($page_size)&page=($state.page)"
+        let url = $"($base_url)?per_page=($page_size)&page=($state.page)&sort=created&direction=desc"
 
         # Fetch and process the page
         let page_data = try {
-            fetch-page $url $use_cache $cache_duration
+            fetch-page $url $use_cache $cache_duration $accept
         } catch {|e|
             # On first page error, propagate it
             if $state.page == 1 {
@@ -239,18 +253,60 @@ export def fetch [
             # No more data, end iteration
             {out: {stars: [], total: $state.total, done: true}}
         } else {
-            # Process and normalize the page
-            let normalized = process-page $page_data
-            let new_total = $state.total + $page_count
+            # Process and normalize the page (star+json envelope)
+            let normalized = process-page $page_data --starred
 
-            if $page_count < $page_size {
-                # Last page (partial)
-                {out: {stars: $normalized, total: $new_total, done: true}}
+            # Early-stop logic for incremental sync
+            if ($since | is-not-empty) {
+                let since_dt = $since | into datetime
+                let page_starred = $normalized | where { ($in.starred_at | default "") != "" }
+                if ($page_starred | is-not-empty) {
+                    let oldest_str = $page_starred | get starred_at | sort | first
+                    let oldest = $oldest_str | into datetime
+                    if $oldest < $since_dt {
+                        # Filter to only items newer than since, then stop
+                        let new_only = $normalized | where {|item|
+                            let sa = $item.starred_at | default ""
+                            ($sa == "") or (($sa | into datetime) >= $since_dt)
+                        }
+                        let new_total = $state.total + ($new_only | length)
+                        {out: {stars: $new_only, total: $new_total, done: true}}
+                    } else {
+                        # All items on this page are newer than since; continue
+                        let new_total = $state.total + $page_count
+                        if $page_count < $page_size {
+                            {out: {stars: $normalized, total: $new_total, done: true}}
+                        } else {
+                            {
+                                out: {stars: $normalized, total: $new_total, done: false}
+                                next: {page: ($state.page + 1), total: $new_total}
+                            }
+                        }
+                    }
+                } else {
+                    # No starred_at on any item; can't early-stop, continue normally
+                    let new_total = $state.total + $page_count
+                    if $page_count < $page_size {
+                        {out: {stars: $normalized, total: $new_total, done: true}}
+                    } else {
+                        {
+                            out: {stars: $normalized, total: $new_total, done: false}
+                            next: {page: ($state.page + 1), total: $new_total}
+                        }
+                    }
+                }
             } else {
-                # More pages available
-                {
-                    out: {stars: $normalized, total: $new_total, done: false}
-                    next: {page: ($state.page + 1), total: $new_total}
+                # No --since: standard full pagination
+                let new_total = $state.total + $page_count
+                if $page_count < $page_size {
+                    # Last page (partial)
+                    {out: {stars: $normalized, total: $new_total, done: true}}
+                } else {
+                    # More pages available
+                    {
+                        out: {stars: $normalized, total: $new_total, done: false}
+                        next: {page: ($state.page + 1), total: $new_total}
+                    }
                 }
             }
         }

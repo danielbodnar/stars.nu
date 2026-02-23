@@ -90,7 +90,7 @@ export use commands/export.nu *
 # ============================================================================
 
 # Storage layer - import specific functions for internal use
-use core/storage.nu [get-paths, load, store, backup, migrate-from-gh-stars, get-stats, ensure-storage]
+use core/storage.nu [get-paths, load, store, backup, migrate-from-gh-stars, get-stats, ensure-storage, get-sync-meta, set-sync-meta, upsert, remove-unstarred]
 
 # Formatters - import for internal use
 use formatters/table.nu [format]
@@ -487,20 +487,24 @@ export def "stars version" []: nothing -> record<version: string, nushell: strin
 # Fetches stars from GitHub (and optionally other sources) and stores them
 # in the local SQLite database. Creates a backup before syncing if configured.
 #
+# By default, performs an incremental sync (only fetches newly-starred repos
+# since last sync). Use --full to force a complete re-fetch of all stars.
+#
 # Parameters:
+#   --full - Force a full sync (re-fetch all stars)
 #   --backup - Create backup before syncing
 #   --no-cache - Bypass gh CLI cache for fresh data
 #
 # Example:
 #   stars sync
+#   stars sync --full
 #   stars sync --backup
 #   stars sync --no-cache
 export def "stars sync" [
+    --full          # Force full sync (re-fetch all stars)
     --backup        # Create backup before syncing
     --no-cache      # Bypass gh CLI cache
 ]: nothing -> nothing {
-    print "Syncing stars from GitHub..."
-
     # Create backup if requested or configured
     let config = load-config
     let should_backup = $backup or ($config.storage?.backup_on_sync? | default false)
@@ -514,57 +518,113 @@ export def "stars sync" [
         }
     }
 
-    # Fetch from GitHub
+    # Determine sync mode
+    let last_synced = get-sync-meta "last_synced_at"
+    let last_full = get-sync-meta "last_full_sync_at"
+    let full_interval = $config.sync?.github?.full_sync_interval_days? | default 7
+
+    # Auto-escalate to full sync if:
+    # - --full flag passed
+    # - No previous sync (first run)
+    # - Last full sync older than full_sync_interval_days
+    let do_full = if $full {
+        true
+    } else if ($last_synced == null) {
+        true
+    } else if ($last_full != null) {
+        let days_since_full = ((date now) - ($last_full | into datetime)) / 1day
+        $days_since_full >= $full_interval
+    } else {
+        true
+    }
+
     let use_cache = not $no_cache
     let cache_duration = $config.sync?.github?.cache_duration? | default "1h"
+    let now_str = date now | format date "%Y-%m-%dT%H:%M:%SZ"
 
-    let stars = try {
-        if $use_cache {
-            fetch --use-cache --cache-duration $cache_duration
+    if $do_full {
+        print "Full sync from GitHub..."
+
+        let stars = try {
+            if $use_cache {
+                fetch --use-cache --cache-duration $cache_duration
+            } else {
+                fetch
+            }
+        } catch {|e|
+            error make {
+                msg: $"Failed to fetch stars from GitHub: ($e.msg)"
+                help: "Ensure you're authenticated with 'gh auth login'"
+            }
+        }
+
+        try {
+            store $stars --replace
+        } catch {|e|
+            error make { msg: $"Failed to save stars: ($e.msg)" }
+        }
+
+        set-sync-meta "last_synced_at" $now_str
+        set-sync-meta "last_full_sync_at" $now_str
+
+        let count = $stars | length
+        print $"Full sync complete: ($count) stars"
+    } else {
+        print "Incremental sync from GitHub..."
+
+        let stars = try {
+            if $use_cache {
+                fetch --use-cache --cache-duration $cache_duration --since $last_synced
+            } else {
+                fetch --since $last_synced
+            }
+        } catch {|e|
+            error make {
+                msg: $"Failed to fetch stars from GitHub: ($e.msg)"
+                help: "Ensure you're authenticated with 'gh auth login'"
+            }
+        }
+
+        if ($stars | is-empty) {
+            print "Already up to date"
         } else {
-            fetch
-        }
-    } catch {|e|
-        error make {
-            msg: $"Failed to fetch stars from GitHub: ($e.msg)"
-            help: "Ensure you're authenticated with 'gh auth login'"
-        }
-    }
+            try {
+                upsert $stars
+            } catch {|e|
+                error make { msg: $"Failed to save stars: ($e.msg)" }
+            }
 
-    # Save to storage
-    try {
-        store $stars --replace
-    } catch {|e|
-        error make {
-            msg: $"Failed to save stars: ($e.msg)"
+            let new_count = $stars | length
+            let total = try { load | length } catch { $new_count }
+            print $"Synced ($new_count) new/updated stars \(($total) total\)"
         }
-    }
 
-    let count = $stars | length
-    print $"Successfully synced ($count) starred repositories"
+        set-sync-meta "last_synced_at" $now_str
+    }
 }
 
 # Sync starred repositories from GitHub
 #
-# Fetches stars specifically from GitHub API. Alias for `stars sync` with
-# GitHub-specific options.
+# Fetches stars specifically from GitHub API with incremental sync support.
+# By default performs incremental sync; use --full to re-fetch all stars.
 #
 # Parameters:
 #   --user (-u) - GitHub username (default: authenticated user)
+#   --full - Force a full sync (re-fetch all stars)
 #   --backup - Create backup before syncing
 #   --no-cache - Bypass gh CLI cache
 #
 # Example:
 #   stars sync github
+#   stars sync github --full
 #   stars sync github --user danielbodnar
 #   stars sync github --no-cache
 export def "stars sync github" [
     --user (-u): string    # GitHub username (default: authenticated user)
+    --full                 # Force full sync (re-fetch all stars)
     --backup               # Create backup before syncing
     --no-cache             # Bypass gh CLI cache
 ]: nothing -> nothing {
-    print "Syncing stars from GitHub..."
-
     # Create backup if requested
     if $backup {
         try {
@@ -575,39 +635,103 @@ export def "stars sync github" [
         }
     }
 
-    # Fetch from GitHub
-    let stars = try {
-        if ($user | is-empty) or ($user == null) {
-            if $no_cache {
-                fetch
+    # Determine sync mode
+    let config = load-config
+    let last_synced = get-sync-meta "last_synced_at"
+    let last_full = get-sync-meta "last_full_sync_at"
+    let full_interval = $config.sync?.github?.full_sync_interval_days? | default 7
+
+    let do_full = if $full {
+        true
+    } else if ($last_synced == null) {
+        true
+    } else if ($last_full != null) {
+        let days_since_full = ((date now) - ($last_full | into datetime)) / 1day
+        $days_since_full >= $full_interval
+    } else {
+        true
+    }
+
+    let use_cache = not $no_cache
+    let cache_duration = $config.sync?.github?.cache_duration? | default "1h"
+    let now_str = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+
+    # Helper: build fetch args based on user/cache/since
+    if $do_full {
+        print "Full sync from GitHub..."
+
+        let stars = try {
+            if ($user | is-empty) or ($user == null) {
+                if $use_cache {
+                    fetch --use-cache --cache-duration $cache_duration
+                } else {
+                    fetch
+                }
             } else {
-                fetch --use-cache
+                if $use_cache {
+                    fetch --user $user --use-cache --cache-duration $cache_duration
+                } else {
+                    fetch --user $user
+                }
             }
+        } catch {|e|
+            error make {
+                msg: $"Failed to fetch stars from GitHub: ($e.msg)"
+                help: "Ensure you're authenticated with 'gh auth login'"
+            }
+        }
+
+        try {
+            store $stars --replace
+        } catch {|e|
+            error make { msg: $"Failed to save stars: ($e.msg)" }
+        }
+
+        set-sync-meta "last_synced_at" $now_str
+        set-sync-meta "last_full_sync_at" $now_str
+
+        let count = $stars | length
+        print $"Full sync complete: ($count) stars from GitHub"
+    } else {
+        print "Incremental sync from GitHub..."
+
+        let stars = try {
+            if ($user | is-empty) or ($user == null) {
+                if $use_cache {
+                    fetch --use-cache --cache-duration $cache_duration --since $last_synced
+                } else {
+                    fetch --since $last_synced
+                }
+            } else {
+                if $use_cache {
+                    fetch --user $user --use-cache --cache-duration $cache_duration --since $last_synced
+                } else {
+                    fetch --user $user --since $last_synced
+                }
+            }
+        } catch {|e|
+            error make {
+                msg: $"Failed to fetch stars from GitHub: ($e.msg)"
+                help: "Ensure you're authenticated with 'gh auth login'"
+            }
+        }
+
+        if ($stars | is-empty) {
+            print "Already up to date"
         } else {
-            if $no_cache {
-                fetch --user $user
-            } else {
-                fetch --user $user --use-cache
+            try {
+                upsert $stars
+            } catch {|e|
+                error make { msg: $"Failed to save stars: ($e.msg)" }
             }
-        }
-    } catch {|e|
-        error make {
-            msg: $"Failed to fetch stars from GitHub: ($e.msg)"
-            help: "Ensure you're authenticated with 'gh auth login'"
-        }
-    }
 
-    # Save to storage
-    try {
-        store $stars --replace
-    } catch {|e|
-        error make {
-            msg: $"Failed to save stars: ($e.msg)"
+            let new_count = $stars | length
+            let total = try { load | length } catch { $new_count }
+            print $"Synced ($new_count) new/updated stars \(($total) total\) from GitHub"
         }
-    }
 
-    let count = $stars | length
-    print $"Successfully synced ($count) starred repositories from GitHub"
+        set-sync-meta "last_synced_at" $now_str
+    }
 }
 
 # ============================================================================
@@ -697,8 +821,9 @@ MAIN COMMANDS
   stars help               Show this help message
 
 SYNC COMMANDS
-  stars sync               Sync from all configured sources
+  stars sync               Sync from all configured sources \(incremental by default\)
   stars sync github        Sync specifically from GitHub
+    --full                 Force full re-fetch of all stars
     --user \(-u\)            GitHub username \(default: authenticated user\)
     --backup               Create backup before syncing
     --no-cache             Bypass gh CLI cache
