@@ -1,8 +1,24 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "stars-nu-docs",
+  "account_id": "5dae265f74e6077ad674a3d855bf9853",
   "compatibility_date": "2026-02-15",
+  "workers_dev": true,
+  "preview_urls": true,
+  "routes": [{
+    "custom_domain": true,
+    "pattern": "docs.nu-stars.dev",
+
+  }],
   "assets": {
-    "directory": "./dist/docs"
+    "directory": "dist"
+  },
+
+  "env": {
+    "production": {
+      "vars": {
+        "NODE_ENV": "production"
+      },
+    }
   }
 }

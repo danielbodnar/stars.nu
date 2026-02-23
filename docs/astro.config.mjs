@@ -3,9 +3,8 @@ import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 
 export default defineConfig({
-  site: 'https://nu-stars.dev',
-  base: '/docs',
-  outDir: './dist/docs',
+  site: 'https://docs.nu-stars.dev',
+  outDir: './dist',
   build: { assets: '_astro' },
   integrations: [
     starlight({
