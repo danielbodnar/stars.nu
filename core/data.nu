@@ -40,7 +40,7 @@ const STALE_DAYS_THRESHOLD = 365
 def polars-available []: nothing -> bool {
     try {
         # Try to create a simple dataframe to verify Polars is working
-        [[a]; [1]] | polars into-df | ignore
+        [[a]; [1]] | polars into-df
         true
     } catch {
         false
@@ -59,7 +59,10 @@ def ensure-db-exists []: nothing -> nothing {
     if not ($db_path | path exists) {
         error make {
             msg: "Stars database not found"
-            label: { text: "Run 'gh-stars fetch' first to populate the database", span: (metadata $db_path).span }
+            label: {
+    text: "Run 'gh-stars fetch' first to populate the database"
+    span: (metadata $db_path).span
+}
             help: "The stars database must be initialized before using Polars operations"
         }
     }
@@ -82,7 +85,7 @@ export def load-lazy []: nothing -> any {
     if not (polars-available) {
         error make {
             msg: "Polars plugin not available"
-            label: { text: "Install nu_plugin_polars and register it", span: (metadata $in).span }
+            label: {text: "Install nu_plugin_polars and register it", span: (metadata $in).span}
             help: "Run: plugin add nu_plugin_polars; plugin use polars"
         }
     }
@@ -98,7 +101,7 @@ export def load-lazy []: nothing -> any {
     } catch {|e|
         error make {
             msg: $"Failed to load stars into LazyFrame: ($e.msg)"
-            label: { text: "database query or conversion failed", span: (metadata $db_path).span }
+            label: {text: "database query or conversion failed", span: (metadata $db_path).span}
         }
     }
 }
@@ -117,12 +120,7 @@ export def load-lazy []: nothing -> any {
 # Example:
 #   load-lazy | apply-defaults
 #   load-lazy | apply-defaults --include-archived --languages [PHP Java]
-export def apply-defaults [
-    --skip-defaults        # Skip all default filters
-    --include-archived     # Include archived repositories
-    --include-old          # Include repos not pushed in 1+ years
-    --languages: list<string> = []  # Languages to exclude (overrides defaults)
-]: any -> any {
+export def apply-defaults [--skip-defaults, --include-archived, --include-old, --languages: list<string>]: any -> any {
     let lf = $in
 
     if $skip_defaults {
@@ -138,7 +136,7 @@ export def apply-defaults [
 
     # Calculate cutoff date for stale repos
     let cutoff_date = (date now) - ($STALE_DAYS_THRESHOLD * 1day)
-    let cutoff_str = $cutoff_date | format date "%Y-%m-%dT%H:%M:%SZ"
+    let cutoff_str = $cutoff_date | format date %Y-%m-%dT%H:%M:%SZ
 
     # Build filter conditions
     mut filtered = $lf
@@ -155,7 +153,7 @@ export def apply-defaults [
     }
 
     # Filter out excluded languages
-    if not ($excluded_langs | is-empty) {
+    if ($excluded_langs | is-not-empty) {
         # Use is-not-in pattern: filter where language is NOT in excluded list
         # Using polars lit with implode to avoid deprecation warning
         $filtered = ($filtered | polars filter (
@@ -173,9 +171,7 @@ export def apply-defaults [
 #
 # Example:
 #   load-lazy | select-columns [name full_name stargazers_count language]
-export def select-columns [
-    columns: list<string>  # Column names to select
-]: any -> any {
+export def select-columns [...columns: string] {
     let lf = $in
 
     if ($columns | is-empty) {
@@ -307,7 +303,7 @@ export def collect-data []: any -> table {
     } catch {|e|
         error make {
             msg: $"Failed to collect LazyFrame: ($e.msg)"
-            label: { text: "collection or conversion failed", span: (metadata $lf).span }
+            label: {text: "collection or conversion failed", span: (metadata $lf).span}
         }
     }
 }
@@ -362,7 +358,7 @@ export def recently-pushed [
     let lf = $in
 
     let cutoff_date = (date now) - ($days * 1day)
-    let cutoff_str = $cutoff_date | format date "%Y-%m-%dT%H:%M:%SZ"
+    let cutoff_str = $cutoff_date | format date %Y-%m-%dT%H:%M:%SZ
 
     $lf
     | polars filter ((polars col pushed_at) > (polars lit $cutoff_str))

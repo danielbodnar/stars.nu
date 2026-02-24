@@ -45,7 +45,7 @@ const LANGUAGE_COLORS = {
     Python: blue
     Ruby: red
     Java: yellow_bold
-    "C++": magenta_bold
+    C++: magenta_bold
     C: white_bold
     Shell: green
     Bash: green
@@ -137,15 +137,13 @@ export def format-stars [
 #
 # Example:
 #   format-date "2024-01-15T10:30:00Z" # Returns "2024-01-15"
-export def format-date [
-    date: any # Date to format
-]: nothing -> string {
+export def format-date [date: datetime] {
     if ($date | is-empty) {
         return ""
     }
 
     try {
-        $date | into datetime | format date "%Y-%m-%d"
+        $date | into datetime | format date %Y-%m-%d
     } catch {
         try {
             # Handle if already a string in ISO format
@@ -176,8 +174,8 @@ export def make-link [
 
     # OSC 8 escape sequence: ESC ] 8 ; ; URL ESC \ TEXT ESC ] 8 ; ; ESC \
     # Use unicode code point 0x1b for escape character
-    let esc = (char -u "1b")
-    let bel = (char -u "07")
+    let esc = (char --unicode "1b")
+    let bel = (char --unicode "07")
     # Using BEL (0x07) as terminator which is more widely supported than ST (ESC \)
     let osc8_start = $"($esc)]8;;($url)($bel)"
     let osc8_end = $"($esc)]8;;($bel)"
@@ -203,9 +201,9 @@ export def colorize-language [
         return $language
     }
 
-    let color = $LANGUAGE_COLORS | get -o $language | default "default"
+    let color = $LANGUAGE_COLORS | get --optional $language | default default
 
-    if $color == "default" {
+    if $color == default {
         $language
     } else {
         $"(ansi $color)($language)(ansi reset)"
@@ -217,7 +215,7 @@ export def colorize-language [
 # ============================================================================
 
 # Parse owner login from JSON string or record
-def get-owner-login [owner: any]: nothing -> string {
+def get-owner-login [owner: string] {
     try {
         let type = $owner | describe | str replace --regex '<.*' ''
         match $type {
@@ -229,7 +227,7 @@ def get-owner-login [owner: any]: nothing -> string {
 }
 
 # Parse topics from JSON string or list
-def parse-topics [topics: any]: nothing -> list {
+def parse-topics [topics: any] {
     try {
         let type = $topics | describe | str replace --regex '<.*' ''
         match $type {
@@ -350,7 +348,7 @@ export def format [
     let cols = if ($columns | is-empty) { $DEFAULT_COLUMNS } else { $columns }
 
     # Filter to only existing columns and return
-    let available_cols = $cols | where {|c| $c in ($formatted | columns) }
+    let available_cols = $cols | where $formatted has $it
     $formatted | select ...$available_cols
 }
 

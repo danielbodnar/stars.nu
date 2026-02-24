@@ -12,7 +12,7 @@
 # Author: Daniel Bodnar
 # ============================================================================
 
-use ../core/storage.nu [get-paths, load, ensure-storage]
+use ../core/storage.nu [get-paths load ensure-storage]
 
 # ============================================================================
 # Internal Helpers
@@ -27,7 +27,7 @@ def generate-output-path [prefix: string, extension: string]: nothing -> path {
 }
 
 # Parse topics from JSON string or list
-def parse-topics [topics: any]: nothing -> list {
+def parse-topics [topics: any] {
     try {
         let type = $topics | describe | str replace --regex '<.*' ''
         match $type {
@@ -43,8 +43,8 @@ def get-owner-login [owner: any]: nothing -> string {
     try {
         let type = $owner | describe | str replace --regex '<.*' ''
         match $type {
-            "string" => { $owner | from json | get login? | default "unknown" }
-            "record" => { $owner | get login? | default "unknown" }
+            "string" => { $owner | from json | get login? | default unknown }
+            "record" => { $owner | get login? | default unknown }
             _ => { "unknown" }
         }
     } catch { "unknown" }
@@ -78,12 +78,10 @@ def transform-repo-for-export [repo: record]: nothing -> record {
 }
 
 # Filter stars based on archive and fork options
-def filter-stars [stars: table, include_archived: bool, include_forks: bool]: nothing -> table {
-    $stars | where {|repo|
-        let is_archived = ($repo.archived? | default 0) == 1
-        let is_fork = ($repo.fork? | default 0) == 1
+def filter-stars [include_archived, include_forks]: nothing -> table {
+    where let is_archived = ($it.archived? | default 0) == 1
+        let is_fork = ($it.fork? | default 0) == 1
         (not $is_archived or $include_archived) and (not $is_fork or $include_forks)
-    }
 }
 
 # ============================================================================
@@ -97,7 +95,7 @@ def generate-bookmark-item [repo: record]: nothing -> string {
     let all_tags = if ($language | str length) > 0 {
         $topics ++ [($language | str downcase)]
     } else { $topics }
-    let tags = $all_tags | str join ","
+    let tags = $all_tags | str join ,
     let description = $repo.description? | default "" | str replace --all '"' '&quot;'
     let add_date = try { $repo.created_at | into datetime | format date %s } catch { "0" }
 
@@ -109,7 +107,7 @@ def generate-bookmark-item [repo: record]: nothing -> string {
 }
 
 # Generate bookmark HTML for a group
-def generate-bookmark-group [group_key: string, repos: list]: nothing -> list<string> {
+def generate-bookmark-group [group_key: string, ...repos] {
     mut html = [$"    <DT><H3>($group_key)</H3>" "    <DL><p>"]
     for repo in $repos { $html ++= [(generate-bookmark-item $repo)] }
     $html ++ ["    </DL><p>"]
@@ -119,7 +117,7 @@ def generate-bookmark-group [group_key: string, repos: list]: nothing -> list<st
 def group-for-bookmarks [filtered: table, group_by: string]: nothing -> record {
     match $group_by {
         "none" => { {"All Stars": $filtered} }
-        "language" => { $filtered | group-by {|repo| $repo.language? | default "Unknown" } }
+        "language" => { $filtered | group-by {|repo| $repo.language? | default Unknown } }
         "owner" => { $filtered | group-by {|repo| get-owner-login $repo.owner } }
         "year" => { $filtered | group-by {|repo| try { $repo.created_at | into datetime | format date %Y } catch { "unknown" } } }
         "topic" => {
@@ -134,7 +132,7 @@ def group-for-bookmarks [filtered: table, group_by: string]: nothing -> record {
 
 # Generate bookmark HTML content
 def generate-bookmark-html [filtered: table, format: string, group_by: string]: nothing -> string {
-    let header = if $format == "chrome" {
+    let header = if $format == chrome {
         "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. DO NOT EDIT! -->\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>"
     } else {
         "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. DO NOT EDIT! -->\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; script-src 'none'; img-src data: *; object-src 'none'\"></meta>\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks Menu</H1>\n<DL><p>"
@@ -143,9 +141,9 @@ def generate-bookmark-html [filtered: table, format: string, group_by: string]: 
     let grouped = group-for-bookmarks $filtered $group_by
     mut html = [$header]
     for group in ($grouped | items {|k, v| {key: $k, value: $v} }) {
-        $html ++= (generate-bookmark-group $group.key $group.value)
+        $html ++= (generate-bookmark-group $group.key ...$group.value)
     }
-    $html ++= ["</DL>"]
+    $html ++= [</DL>]
 
     $html | str join "\n"
 }
@@ -174,7 +172,7 @@ export def "stars export csv" [
     let stars = load
 
     let output_path = if ($output | is-empty) {
-        generate-output-path "stars" "csv"
+        generate-output-path stars csv
     } else { $output | path expand }
 
     # Ensure parent directory exists
@@ -225,7 +223,7 @@ export def "stars export json" [
     let stars = load
 
     let output_path = if ($output | is-empty) {
-        generate-output-path "stars" "json"
+        generate-output-path stars json
     } else { $output | path expand }
 
     # Ensure parent directory exists
@@ -282,7 +280,7 @@ export def "stars export nuon" [
     let stars = load
 
     let output_path = if ($output | is-empty) {
-        generate-output-path "stars" "nuon"
+        generate-output-path stars nuon
     } else { $output | path expand }
 
     # Ensure parent directory exists
@@ -324,7 +322,7 @@ export def "stars export md" [
     let stars = load
 
     let output_path = if ($output | is-empty) {
-        generate-output-path "stars" "md"
+        generate-output-path stars md
     } else { $output | path expand }
 
     # Ensure parent directory exists
@@ -336,7 +334,7 @@ export def "stars export md" [
     let data = $stars | each {|repo| transform-repo-for-export $repo }
 
     let cols = if ($columns | is-empty) or ($columns == null) {
-        ["name" "description" "language" "stars"]
+        [name description language stars]
     } else {
         $columns
     }
@@ -365,7 +363,7 @@ export def "stars export md" [
         ""
         $"| ($header) |"
         $"| ($separator) |"
-        ...($rows | each {|r| $"| ($r) |"})
+        ...($rows | each {|r| $"| ($r) |" })
     ] | str join "\n"
 
     try {
@@ -405,7 +403,7 @@ export def "stars export firefox" [
     let stars = load
 
     let output_path = if ($output | is-empty) {
-        generate-output-path "bookmarks_firefox" "html"
+        generate-output-path bookmarks_firefox html
     } else { $output | path expand }
 
     # Ensure parent directory exists
@@ -415,7 +413,7 @@ export def "stars export firefox" [
     }
 
     let filtered = filter-stars $stars $include_archived $include_forks
-    let html_content = generate-bookmark-html $filtered "firefox" $group_by
+    let html_content = generate-bookmark-html $filtered firefox $group_by
 
     try {
         $html_content | save --force $output_path
@@ -454,7 +452,7 @@ export def "stars export chrome" [
     let stars = load
 
     let output_path = if ($output | is-empty) {
-        generate-output-path "bookmarks_chrome" "html"
+        generate-output-path bookmarks_chrome html
     } else { $output | path expand }
 
     # Ensure parent directory exists
@@ -464,7 +462,7 @@ export def "stars export chrome" [
     }
 
     let filtered = filter-stars $stars $include_archived $include_forks
-    let html_content = generate-bookmark-html $filtered "chrome" $group_by
+    let html_content = generate-bookmark-html $filtered chrome $group_by
 
     try {
         $html_content | save --force $output_path

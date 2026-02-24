@@ -25,7 +25,7 @@
 # ============================================================================
 
 # Parse topics from JSON string or list to ensure consistent list format
-def parse-topics-internal [topics: any]: nothing -> list<string> {
+def parse-topics-internal [topics: string]: any -> any {
     if ($topics | is-empty) { return [] }
 
     let type = $topics | describe | str replace --regex '<.*' ''
@@ -39,33 +39,33 @@ def parse-topics-internal [topics: any]: nothing -> list<string> {
 }
 
 # Extract owner login from owner field (handles JSON string or record)
-def get-owner-login-internal [owner: any]: nothing -> string {
-    if ($owner | is-empty) { return "unknown" }
+def get-owner-login-internal [owner: string] {
+    if ($owner | is-empty) { return unknown }
 
     let type = $owner | describe | str replace --regex '<.*' ''
     match $type {
         "string" => {
-            try { $owner | from json | get login? | default "unknown" } catch { "unknown" }
+            try { $owner | from json | get login? | default unknown } catch { "unknown" }
         }
         "record" => {
-            $owner | get login? | default "unknown"
+            $owner | get login? | default unknown
         }
         _ => { "unknown" }
     }
 }
 
 # Format datetime to ISO 8601 string
-def format-iso8601 [date_value: any]: nothing -> string {
+def format-iso8601 [date_value: datetime] {
     if ($date_value | is-empty) { return "" }
 
     try {
         let type = $date_value | describe | str replace --regex '<.*' ''
         match $type {
-            "datetime" => { $date_value | format date "%Y-%m-%dT%H:%M:%SZ" }
+            "datetime" => { $date_value | format date %Y-%m-%dT%H:%M:%SZ }
             "string" => {
                 # Already a string, try to parse and reformat for consistency
                 try {
-                    $date_value | into datetime | format date "%Y-%m-%dT%H:%M:%SZ"
+                    $date_value | into datetime | format date %Y-%m-%dT%H:%M:%SZ
                 } catch {
                     $date_value
                 }
@@ -76,9 +76,9 @@ def format-iso8601 [date_value: any]: nothing -> string {
 }
 
 # Sanitize string for safe output (handle nulls and special chars)
-def sanitize-string [value: any]: nothing -> string {
-    if ($value | is-empty) { return "" }
-    $value | to text
+def sanitize-string []: nothing -> string {
+    if (is-empty) { return "" }
+    $in | to text
 }
 
 # Transform repository to minimal schema
@@ -208,7 +208,7 @@ export def to-csv-output [
     let export_data = if ($columns | length) > 0 {
         # Filter to only valid columns that exist in the data
         let available_columns = $transformed | first | columns
-        let valid_columns = $columns | where {|col| $col in $available_columns }
+        let valid_columns = $columns | where $it in $available_columns
 
         if ($valid_columns | length) == 0 {
             $transformed
@@ -307,7 +307,7 @@ export def to-md-output [
     # Select specific columns if requested
     let export_data = if ($columns | length) > 0 {
         let available_columns = $transformed | first | columns
-        let valid_columns = $columns | where {|col| $col in $available_columns }
+        let valid_columns = $columns | where $it in $available_columns
 
         if ($valid_columns | length) == 0 {
             $transformed

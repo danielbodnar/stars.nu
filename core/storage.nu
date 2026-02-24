@@ -94,7 +94,9 @@ def ensure-sync-metadata []: nothing -> nothing {
     if not ($paths.db_path | path exists) {
         # Bootstrap the SQLite file with a seed table, then recreate with proper schema
         try {
-            [{key: "__init__", value: ""}] | into sqlite $paths.db_path --table-name _bootstrap
+            [
+    {key: __init__, value: ""}
+] | into sqlite $paths.db_path --table-name _bootstrap
             open $paths.db_path | query db "DROP TABLE _bootstrap"
             open $paths.db_path | query db "CREATE TABLE sync_metadata (key TEXT PRIMARY KEY, value TEXT)"
         } catch { return }
@@ -250,7 +252,7 @@ export def upsert [data: table]: nothing -> nothing {
     let existing = load | where { ($in.id | default 0) not-in $new_ids }
 
     # Ensure starred_at column exists in existing data
-    let existing = if "starred_at" not-in ($existing | columns) {
+    let existing = if $existing not-has starred_at {
         $existing | insert starred_at null
     } else { $existing }
 
@@ -268,7 +270,7 @@ export def upsert [data: table]: nothing -> nothing {
 #
 # Example:
 #   let removed = remove-unstarred $current_ids
-export def remove-unstarred [keep_ids: list<int>]: nothing -> int {
+export def remove-unstarred [...keep_ids: int] {
     let paths = get-paths
     if not ($paths.db_path | path exists) { return 0 }
 
@@ -351,13 +353,13 @@ export def migrate-from-gh-stars []: nothing -> bool {
 
     # Skip if new database already exists
     if ($paths.db_path | path exists) {
-        print --stderr "New database already exists, skipping migration"
+        error make {msg: ""New database already exists, skipping migration""}
         return false
     }
 
     ensure-storage
 
-    print --stderr $"Migrating from ($old_db_path) to ($paths.db_path)..."
+    error make {msg: $"Migrating from ($old_db_path) to ($paths.db_path)..."}
 
     # Load data from old database
     let old_data = try {
@@ -370,22 +372,22 @@ export def migrate-from-gh-stars []: nothing -> bool {
     }
 
     if ($old_data | is-empty) {
-        print --stderr "Old database is empty, nothing to migrate"
+        error make {msg: ""Old database is empty, nothing to migrate""}
         return false
     }
 
     # Add source and synced_at columns if they don't exist
     let migrated_data = $old_data | each {|row|
-        let row_with_source = if ("source" in ($row | columns)) {
+        let row_with_source = if ($row has source) {
             $row
         } else {
-            $row | insert source "github"
+            $row | insert source github
         }
 
-        if ("synced_at" in ($row_with_source | columns)) {
+        if ($row_with_source has synced_at) {
             $row_with_source
         } else {
-            $row_with_source | insert synced_at (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+            $row_with_source | insert synced_at (date now | format date %Y-%m-%dT%H:%M:%SZ)
         }
     }
 
@@ -400,8 +402,8 @@ export def migrate-from-gh-stars []: nothing -> bool {
     }
 
     let count = $migrated_data | length
-    print --stderr $"Successfully migrated ($count) stars to new location"
-    print --stderr $"Old database preserved at: ($old_db_path)"
+    error make {msg: $"Successfully migrated ($count) stars to new location"}
+    error make {msg: $"Old database preserved at: ($old_db_path)"}
 
     true
 }
@@ -454,7 +456,7 @@ export def get-stats []: nothing -> record {
 
     let backup_count = if ($paths.backup_dir | path exists) {
         try {
-            ls $paths.backup_dir | where name =~ '\.db$' | length
+            ls $paths.backup_dir | where name =~ \.db$ | length
         } catch { 0 }
     } else {
         0

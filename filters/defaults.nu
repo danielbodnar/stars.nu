@@ -25,7 +25,7 @@
 # ============================================================================
 
 # Default excluded languages
-const DEFAULT_EXCLUDED_LANGUAGES = [PHP, "C#", Java, Python, Ruby]
+const DEFAULT_EXCLUDED_LANGUAGES = [PHP "C#" Java Python Ruby]
 
 # Default staleness threshold in days
 const DEFAULT_STALENESS_DAYS = 365
@@ -47,11 +47,9 @@ const DEFAULT_STALENESS_DAYS = 365
 #
 # Example:
 #   polars open stars.parquet | exclude-old --days 180 | polars collect
-export def exclude-old [
-    --days (-d): int = 365    # Repos not pushed in this many days are excluded
-]: any -> any {
-    let cutoff = (date now) - ($days * 1day)
-    $in | polars filter ((polars col pushed) > (polars lit $cutoff))
+export def exclude-old [--days (-d): int]: any -> any {
+    let cutoff_str = (date now) - ($days * 1day) | format date %Y-%m-%dT%H:%M:%SZ
+    $in | polars filter ((polars col pushed | polars cast str) > (polars lit $cutoff_str))
 }
 
 # Exclude archived repositories
@@ -64,7 +62,7 @@ export def exclude-old [
 # Example:
 #   polars open stars.parquet | exclude-archived | polars collect
 export def exclude-archived []: any -> any {
-    $in | polars filter ((polars col archived) == (polars lit false))
+    polars filter ((polars col archived) == (polars lit false))
 }
 
 # Exclude specified programming languages
@@ -85,8 +83,8 @@ export def exclude-languages [
 ]: any -> any {
     # Filter out rows where language is in the exclusion list
     # Use polars is-in with negation
-    $in | polars filter (
-        (polars col language | polars is-in $languages | polars expr-not)
+    polars filter (
+        (polars col language | polars is-in (polars lit $languages | polars implode) | polars expr-not)
     )
 }
 
@@ -100,7 +98,7 @@ export def exclude-languages [
 # Example:
 #   polars open stars.parquet | exclude-forks | polars collect
 export def exclude-forks []: any -> any {
-    $in | polars filter ((polars col fork) == (polars lit false))
+    polars filter ((polars col fork) == (polars lit false))
 }
 
 # ============================================================================
@@ -123,8 +121,8 @@ export def exclude-forks []: any -> any {
 export def include-recent [
     --days (-d): int = 30    # Keep repos pushed within this many days
 ]: any -> any {
-    let cutoff = (date now) - ($days * 1day)
-    $in | polars filter ((polars col pushed) > (polars lit $cutoff))
+    let cutoff_str = (date now) - ($days * 1day) | format date %Y-%m-%dT%H:%M:%SZ
+    $in | polars filter ((polars col pushed | polars cast str) > (polars lit $cutoff_str))
 }
 
 # Include only specific languages
@@ -142,7 +140,7 @@ export def include-recent [
 export def include-languages [
     --languages (-l): list<string>  # Languages to include
 ]: any -> any {
-    $in | polars filter (polars col language | polars is-in $languages)
+    polars filter (polars col language | polars is-in (polars lit $languages | polars implode))
 }
 
 # ============================================================================
@@ -231,44 +229,29 @@ export def filter-stats [
     --languages (-l): list<string> = [PHP, "C#", Java, Python, Ruby]
 ]: any -> record {
     let df = $in
-    let total = $df | polars count | polars into-nu | get count | first
+    let total = $df | polars shape | polars into-nu | get rows | first
 
-    let cutoff = (date now) - ($days * 1day)
+    let cutoff_str = (date now) - ($days * 1day) | format date %Y-%m-%dT%H:%M:%SZ
 
     let archived_count = $df
         | polars filter ((polars col archived) == (polars lit true))
-        | polars count
-        | polars into-nu
-        | get count
-        | first
+        | polars shape | polars into-nu | get rows | first
 
     let old_count = $df
-        | polars filter ((polars col pushed) <= (polars lit $cutoff))
-        | polars count
-        | polars into-nu
-        | get count
-        | first
+        | polars filter ((polars col pushed | polars cast str) <= (polars lit $cutoff_str))
+        | polars shape | polars into-nu | get rows | first
 
     let fork_count = $df
         | polars filter ((polars col fork) == (polars lit true))
-        | polars count
-        | polars into-nu
-        | get count
-        | first
+        | polars shape | polars into-nu | get rows | first
 
     let excluded_lang_count = $df
-        | polars filter (polars col language | polars is-in $languages)
-        | polars count
-        | polars into-nu
-        | get count
-        | first
+        | polars filter (polars col language | polars is-in (polars lit $languages | polars implode))
+        | polars shape | polars into-nu | get rows | first
 
     let after_all = $df
         | apply-all --days $days --languages $languages
-        | polars count
-        | polars into-nu
-        | get count
-        | first
+        | polars shape | polars into-nu | get rows | first
 
     {
         total_rows: $total

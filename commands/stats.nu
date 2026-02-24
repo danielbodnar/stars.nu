@@ -23,8 +23,8 @@
 # Version: 1.0.0
 # ============================================================================
 
-use ../core/storage.nu [get-paths, load]
-use ../core/types.nu [parse-topics, get-owner-login, excluded-languages]
+use ../core/storage.nu [get-paths load]
+use ../core/types.nu [parse-topics get-owner-login excluded-languages]
 use ../formatters/table.nu [format-stars]
 use ../formatters/json.nu [to-json-output]
 
@@ -115,29 +115,26 @@ def query-by-year [db_path: path]: nothing -> table {
 }
 
 # Group stars by language using pipeline
-def group-by-language [data: table, limit: int]: nothing -> table {
-    $data
-    | group-by {|repo| $repo.language? | default "Unknown" }
+def group-by-language [...limit: list<any>]: any -> any {
+    group-by {|repo| $repo.language? | default Unknown }
     | items {|key, value| {key: $key, count: ($value | length)} }
     | sort-by count --reverse
     | first $limit
 }
 
 # Group stars by owner using pipeline
-def group-by-owner [data: table, limit: int]: nothing -> table {
-    $data
-    | group-by {|repo| get-owner-login ($repo.owner? | default "") }
+def group-by-owner [...limit: list<any>] {
+    group-by {|repo| get-owner-login ($repo.owner? | default "") }
     | items {|key, value| {key: $key, count: ($value | length)} }
     | sort-by count --reverse
     | first $limit
 }
 
 # Group stars by year using pipeline
-def group-by-year [data: table, limit: int]: nothing -> table {
-    $data
-    | group-by {|repo|
+def group-by-year [...limit: list<any>] {
+    group-by {|repo|
         try {
-            $repo.created_at? | default "" | into datetime | format date "%Y"
+            $repo.created_at? | default "" | into datetime | format date %Y
         } catch {
             "unknown"
         }
@@ -152,7 +149,7 @@ def group-by-topic [data: table, limit: int]: nothing -> table {
     let all_topics = $data
         | each {|repo| parse-topics ($repo.topics? | default []) }
         | flatten
-        | where {|t| $t != null and $t != "" }
+        | where $it != null and $it != ""
 
     $all_topics
     | uniq --count
@@ -162,11 +159,9 @@ def group-by-topic [data: table, limit: int]: nothing -> table {
 }
 
 # Apply default filters (exclude archived, old repos)
-def apply-default-filters [data: table]: nothing -> table {
-    $data | where {|repo|
-        let is_archived = ($repo.archived? | default 0) == 1 or ($repo.archived? | default false) == true
+def apply-default-filters []: nothing -> table {
+    where let is_archived = ($it.archived? | default 0) == 1 or ($it.archived? | default false)
         not $is_archived
-    }
 }
 
 # ============================================================================
@@ -263,9 +258,9 @@ export def "stars group" [
     let data = load
 
     let result = match $by {
-        "language" => { group-by-language $data $limit }
-        "owner" => { group-by-owner $data $limit }
-        "year" => { group-by-year $data $limit }
+        "language" => { group-by-language ...$data $limit }
+        "owner" => { group-by-owner ...$data $limit }
+        "year" => { group-by-year ...$data $limit }
         "topic" => { group-by-topic $data $limit }
         _ => {
             error make {
@@ -324,13 +319,13 @@ export def "stars top" [
 
     let sorted = match $by {
         "stars" => {
-            $data | sort-by {|r| $r.stargazers_count? | default ($r.stars? | default 0)} --reverse
+            $data | sort-by {|r| $r.stargazers_count? | default ($r.stars? | default 0) } --reverse
         }
         "forks" => {
-            $data | sort-by {|r| $r.forks_count? | default ($r.forks? | default 0)} --reverse
+            $data | sort-by {|r| $r.forks_count? | default ($r.forks? | default 0) } --reverse
         }
         "updated" => {
-            $data | sort-by {|r| $r.updated_at? | default ($r.pushed_at? | default "1970-01-01")} --reverse
+            $data | sort-by {|r| $r.updated_at? | default ($r.pushed_at? | default "1970-01-01") } --reverse
         }
         _ => {
             error make {
@@ -404,9 +399,8 @@ export def "stars recent" [
     let cutoff_date = (date now) - ($days * 1day)
 
     let recent_repos = $data
-        | where {|repo|
-            try {
-                let pushed = $repo.pushed_at? | default ($repo.updated_at? | default "")
+        | where try {
+                let pushed = $it.pushed_at? | default ($it.updated_at? | default "")
                 if ($pushed | is-empty) {
                     false
                 } else {
@@ -415,8 +409,7 @@ export def "stars recent" [
             } catch {
                 false
             }
-        }
-        | sort-by {|r| $r.pushed_at? | default ($r.updated_at? | default "1970-01-01")} --reverse
+        | sort-by {|r| $r.pushed_at? | default ($r.updated_at? | default "1970-01-01") } --reverse
         | first $limit
 
     let result = $recent_repos | each {|repo|
@@ -478,11 +471,9 @@ export def "stars untagged" [
     let data = load
 
     let untagged = $data
-        | where {|repo|
-            let topics = parse-topics ($repo.topics? | default [])
+        | where let topics = parse-topics ($it.topics? | default [])
             ($topics | length) == 0
-        }
-        | sort-by {|r| $r.stargazers_count? | default ($r.stars? | default 0)} --reverse
+        | sort-by {|r| $r.stargazers_count? | default ($r.stars? | default 0) } --reverse
         | first $limit
 
     let result = $untagged | each {|repo|
@@ -548,17 +539,17 @@ export def "stars report" [
     let by_language = stars group --by language --limit 15
     let by_owner = stars group --by owner --limit 10
 
-    let report = if $format == "json" {
+    let report = if $format == json {
         # JSON format report
         {
-            generated_at: (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+            generated_at: (date now | format date %Y-%m-%dT%H:%M:%SZ)
             summary: {
                 total_stars: $stats.total_stars
                 unique_languages: $stats.unique_languages
                 archived_repos: $stats.archived_repos
                 forked_repos: $stats.forked_repos
                 untagged_repos: $stats.untagged_repos
-                cache_updated: ($stats.cache_updated | format date "%Y-%m-%dT%H:%M:%SZ")
+                cache_updated: ($stats.cache_updated | format date %Y-%m-%dT%H:%M:%SZ)
             }
             top_languages: $stats.top_languages
             top_owners: $stats.top_owners
@@ -577,22 +568,22 @@ export def "stars report" [
 
         # Format top languages table
         let lang_table = $stats.top_languages
-            | each {|row| $"| ($row.language) | ($row.count) |"}
+            | each {|row| $"| ($row.language) | ($row.count) |" }
             | str join "\n"
 
         # Format top owners table
         let owner_table = $stats.top_owners
-            | each {|row| $"| ($row.owner) | ($row.count) |"}
+            | each {|row| $"| ($row.owner) | ($row.count) |" }
             | str join "\n"
 
         # Format by year table
         let year_table = $stats.by_year
-            | each {|row| $"| ($row.year) | ($row.count) |"}
+            | each {|row| $"| ($row.year) | ($row.count) |" }
             | str join "\n"
 
         # Format top repos table
         let top_repos_table = $top_by_stars
-            | each {|row| $"| ($row.full_name) | ($row.language) | ($row.stars_display) |"}
+            | each {|row| $"| ($row.full_name) | ($row.language) | ($row.stars_display) |" }
             | str join "\n"
 
         # Format recent activity table
@@ -605,7 +596,7 @@ export def "stars report" [
 
         # Format untagged table
         let untagged_table = $untagged
-            | each {|row| $"| ($row.full_name) | ($row.language) | ($row.stars_display) |"}
+            | each {|row| $"| ($row.full_name) | ($row.language) | ($row.stars_display) |" }
             | str join "\n"
 
         $"# GitHub Stars Report
@@ -669,7 +660,7 @@ Generated: (date now | format date '%Y-%m-%d %H:%M:%S')
         let output_path = $output | path expand
         try {
             $report | save --force $output_path
-            print --stderr $"Report saved to: ($output_path)"
+            error make {msg: $"Report saved to: ($output_path)"}
         } catch {|e|
             error make {
                 msg: $"Failed to save report: ($e.msg)"

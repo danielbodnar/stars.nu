@@ -42,7 +42,7 @@ def fetch-page [
         let error_msg = $result.stderr | str trim
 
         # Provide helpful suggestions based on common errors
-        let help_text = if ($error_msg =~ "authentication") or ($error_msg =~ "401") {
+        let help_text = if ($error_msg =~ authentication) or ($error_msg =~ "401") {
             "Run 'gh auth login' to authenticate with GitHub"
         } else if ($error_msg =~ "rate limit") or ($error_msg =~ "403") {
             "GitHub API rate limit exceeded. Wait a few minutes or use --use-cache"
@@ -76,10 +76,7 @@ def fetch-page [
 #
 # Parameters:
 #   page_data: list - Raw list of repository objects from GitHub API
-def process-page [
-    page_data: list
-    --starred           # Whether data is in star+json envelope format
-]: nothing -> list {
+def process-page [...page_data: list<any>] {
     if $starred {
         $page_data | each {|item|
             normalize-repo ($item.repo? | default $item) --starred-at ($item.starred_at? | default null)
@@ -92,7 +89,7 @@ def process-page [
 # Extract owner login from owner object or string
 #
 # Handles both record format (from API) and string format (from stored data).
-def get-owner-login [owner: any]: nothing -> string {
+def get-owner-login [owner: string] {
     try {
         let type = $owner | describe | str replace --regex '<.*' ''
         match $type {
@@ -104,7 +101,7 @@ def get-owner-login [owner: any]: nothing -> string {
 }
 
 # Extract license name from license object or return null
-def get-license-name [license: any]: nothing -> string {
+def get-license-name [license: int] {
     try {
         if ($license | is-empty) or ($license == null) {
             return null
@@ -123,7 +120,7 @@ def get-license-name [license: any]: nothing -> string {
 }
 
 # Parse topics from array or JSON string
-def parse-topics [topics: any]: nothing -> string {
+def parse-topics [topics: any] {
     try {
         let type = $topics | describe | str replace --regex '<.*' ''
         let topic_list = match $type {
@@ -153,14 +150,14 @@ export def normalize-repo [
     repo: record
     --starred-at: string   # From star+json envelope: when the user starred this repo
 ]: nothing -> record {
-    let synced_at = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+    let synced_at = date now | format date %Y-%m-%dT%H:%M:%SZ
 
     {
         id: ($repo.id? | default 0)
         node_id: ($repo.node_id? | default "")
         name: ($repo.name? | default "")
         full_name: ($repo.full_name? | default "")
-        owner: (get-owner-login ($repo.owner? | default {login: "unknown"}))
+        owner: (get-owner-login ($repo.owner? | default {login: unknown}))
         private: ($repo.private? | default false)
         html_url: ($repo.html_url? | default "")
         description: ($repo.description? | default null)
@@ -180,9 +177,9 @@ export def normalize-repo [
         open_issues_count: ($repo.open_issues_count? | default 0)
         license: (get-license-name ($repo.license? | default null))
         topics: (parse-topics ($repo.topics? | default []))
-        visibility: ($repo.visibility? | default "public")
-        default_branch: ($repo.default_branch? | default "main")
-        source: "github"
+        visibility: ($repo.visibility? | default public)
+        default_branch: ($repo.default_branch? | default main)
+        source: github
         synced_at: $synced_at
         starred_at: ($starred_at | default null)
     }
@@ -251,10 +248,12 @@ export def fetch [
 
         if $page_count == 0 {
             # No more data, end iteration
-            {out: {stars: [], total: $state.total, done: true}}
+            {
+    out: {stars: [], total: $state.total, done: true}
+}
         } else {
             # Process and normalize the page (star+json envelope)
-            let normalized = process-page $page_data --starred
+            let normalized = process-page ...$page_data --starred
 
             # Early-stop logic for incremental sync
             if ($since | is-not-empty) {
@@ -265,10 +264,8 @@ export def fetch [
                     let oldest = $oldest_str | into datetime
                     if $oldest < $since_dt {
                         # Filter to only items newer than since, then stop
-                        let new_only = $normalized | where {|item|
-                            let sa = $item.starred_at | default ""
+                        let new_only = $normalized | where let sa = $it.starred_at | default ""
                             ($sa == "") or (($sa | into datetime) >= $since_dt)
-                        }
                         let new_total = $state.total + ($new_only | length)
                         {out: {stars: $new_only, total: $new_total, done: true}}
                     } else {

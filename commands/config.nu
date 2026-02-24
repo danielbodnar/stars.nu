@@ -42,24 +42,24 @@ def ensure-config-dir []: nothing -> nothing {
 # Get default configuration
 def get-default-config []: nothing -> record {
     {
-        version: "3.0.0"
+        version: 3.0.0
         storage: {
             db_path: null
             backup_on_sync: false
         }
         defaults: {
             filters: {
-                exclude_languages: [PHP, "C#", Java, Python, Ruby]
+                exclude_languages: [PHP "C#" Java Python Ruby]
                 exclude_archived: true
                 exclude_forks: false
                 min_pushed_days: 365
             }
-            columns: [owner, name, language, stars, pushed, homepage, topics, description, forks, issues]
-            sort_by: "stars"
+            columns: [owner name language stars pushed homepage topics description forks issues]
+            sort_by: stars
             sort_reverse: true
         }
         output: {
-            default_format: "table"
+            default_format: table
             table: {
                 max_description_length: 240
                 clickable_links: true
@@ -70,7 +70,7 @@ def get-default-config []: nothing -> record {
             sources: [github]
             github: {
                 per_page: 100
-                cache_duration: "1h"
+                cache_duration: 1h
                 full_sync_interval_days: 7
             }
         }
@@ -88,7 +88,7 @@ def load-config []: nothing -> record {
     try {
         open $config_path | from nuon
     } catch {|e|
-        print --stderr $"Warning: Failed to load config, using defaults: ($e.msg)"
+        error make {msg: $"Warning: Failed to load config, using defaults: ($e.msg)"}
         get-default-config
     }
 }
@@ -115,7 +115,7 @@ def get-nested-value [
     data: record
     key: string
 ]: nothing -> record<value: any, found: bool> {
-    let parts = $key | split row "."
+    let parts = $key | split row .
 
     mut current = $data
     mut found = true
@@ -123,12 +123,12 @@ def get-nested-value [
     for part in $parts {
         let type = $current | describe | str replace --regex '<.*' ''
 
-        if $type != "record" {
+        if $type != record {
             $found = false
             break
         }
 
-        if $part not-in ($current | columns) {
+        if $current not-has $part {
             $found = false
             break
         }
@@ -140,12 +140,8 @@ def get-nested-value [
 }
 
 # Set a nested value using dot notation
-def set-nested-value [
-    data: record
-    key: string
-    value: any
-]: nothing -> record {
-    let parts = $key | split row "."
+def set-nested-value [data: record, key: string, value: record] {
+    let parts = $key | split row .
 
     if ($parts | length) == 1 {
         # Simple case: top-level key
@@ -153,16 +149,16 @@ def set-nested-value [
     } else {
         # Nested case: recursively update
         let first = $parts | first
-        let rest = $parts | skip 1 | str join "."
+        let rest = $parts | skip 1 | str join .
 
-        let current_value = if $first in ($data | columns) {
+        let current_value = if $data has $first {
             $data | get $first
         } else {
             {}
         }
 
         let type = $current_value | describe | str replace --regex '<.*' ''
-        let nested = if $type == "record" {
+        let nested = if $type == record {
             set-nested-value $current_value $rest $value
         } else {
             # Create nested structure
@@ -261,7 +257,7 @@ export def "stars config edit" []: nothing -> nothing {
         stars config init
     }
 
-    let editor = $env.EDITOR? | default ($env.VISUAL? | default "nvim")
+    let editor = $env.EDITOR? | default ($env.VISUAL? | default nvim)
 
     try {
         run-external $editor $config_path
@@ -316,10 +312,7 @@ export def "stars config get" [
 #   stars config set defaults.sort_by "pushed"
 #   stars config set output.table.max_description_length 120
 #   stars config set defaults.filters.exclude_archived false
-export def "stars config set" [
-    key: string  # Config key (dot notation)
-    value: any   # Value to set
-]: nothing -> nothing {
+export def "stars config set" [key: string, value: any] {
     let config = load-config
     let updated_config = set-nested-value $config $key $value
 
@@ -387,39 +380,39 @@ export def "stars config validate" []: nothing -> record<valid: bool, errors: li
     mut warnings = []
 
     # Check version
-    if "version" not-in ($config | columns) {
-        $errors = ($errors | append "Missing 'version' field")
+    if $config not-has version {
+        $errors ++= ["Missing 'version' field"]
     }
 
     # Check storage section
-    if "storage" not-in ($config | columns) {
-        $errors = ($errors | append "Missing 'storage' section")
+    if $config not-has storage {
+        $errors ++= ["Missing 'storage' section"]
     } else {
-        if "backup_on_sync" not-in ($config.storage | columns) {
-            $warnings = ($warnings | append "Missing 'storage.backup_on_sync' setting")
+        if $config.storage not-has backup_on_sync {
+            $warnings ++= ["Missing 'storage.backup_on_sync' setting"]
         }
     }
 
     # Check defaults section
-    if "defaults" not-in ($config | columns) {
-        $errors = ($errors | append "Missing 'defaults' section")
+    if $config not-has defaults {
+        $errors ++= ["Missing 'defaults' section"]
     } else {
-        if "columns" not-in ($config.defaults | columns) {
-            $warnings = ($warnings | append "Missing 'defaults.columns' setting")
+        if $config.defaults not-has columns {
+            $warnings ++= ["Missing 'defaults.columns' setting"]
         }
-        if "filters" not-in ($config.defaults | columns) {
-            $warnings = ($warnings | append "Missing 'defaults.filters' section")
+        if $config.defaults not-has filters {
+            $warnings ++= ["Missing 'defaults.filters' section"]
         }
     }
 
     # Check output section
-    if "output" not-in ($config | columns) {
-        $warnings = ($warnings | append "Missing 'output' section")
+    if $config not-has output {
+        $warnings ++= ["Missing 'output' section"]
     }
 
     # Check sync section
-    if "sync" not-in ($config | columns) {
-        $warnings = ($warnings | append "Missing 'sync' section")
+    if $config not-has sync {
+        $warnings ++= ["Missing 'sync' section"]
     }
 
     let valid = ($errors | is-empty)
@@ -427,14 +420,14 @@ export def "stars config validate" []: nothing -> record<valid: bool, errors: li
     if $valid and ($warnings | is-empty) {
         print "Configuration is valid"
     } else {
-        if not ($errors | is-empty) {
-            print "Errors:"
+        if ($errors | is-not-empty) {
+            print Errors:
             for err in $errors {
                 print $"  - ($err)"
             }
         }
-        if not ($warnings | is-empty) {
-            print "Warnings:"
+        if ($warnings | is-not-empty) {
+            print Warnings:
             for warn in $warnings {
                 print $"  - ($warn)"
             }

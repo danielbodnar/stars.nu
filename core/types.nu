@@ -33,31 +33,67 @@
 export def star-schema []: nothing -> record {
     {
         fields: {
-            id: { type: int, nullable: false, description: "Unique identifier" }
-            owner: { type: string, nullable: false, description: "Repository owner (extracted from JSON or direct)" }
-            name: { type: string, nullable: false, description: "Repository name" }
-            full_name: { type: string, nullable: false, description: "Full name (owner/name)" }
-            description: { type: string, nullable: true, description: "Repository description" }
-            url: { type: string, nullable: false, description: "HTML URL to repository" }
-            homepage: { type: string, nullable: true, description: "Project homepage URL" }
-            language: { type: string, nullable: true, description: "Primary programming language" }
-            topics: { type: "list<string>", nullable: false, default: [], description: "Repository topics/tags" }
-            stars: { type: int, nullable: false, default: 0, description: "Stargazers count" }
-            forks: { type: int, nullable: false, default: 0, description: "Forks count" }
-            issues: { type: int, nullable: false, default: 0, description: "Open issues count" }
-            pushed: { type: datetime, nullable: true, description: "Last push timestamp" }
-            created: { type: datetime, nullable: true, description: "Creation timestamp" }
-            updated: { type: datetime, nullable: true, description: "Last update timestamp" }
-            archived: { type: bool, nullable: false, default: false, description: "Whether repository is archived" }
-            fork: { type: bool, nullable: false, default: false, description: "Whether repository is a fork" }
-            license: { type: string, nullable: true, description: "License name (e.g., MIT, Apache-2.0)" }
-            readme_excerpt: { type: string, nullable: true, description: "Excerpt from README for search" }
-            source: { type: string, nullable: false, default: "github", description: "Data source: github|firefox|chrome|awesome|manual" }
-            synced_at: { type: datetime, nullable: false, description: "When this record was last synced" }
-            starred_at: { type: datetime, nullable: true, description: "When the user starred this repo (from GitHub star+json)" }
+            id: {type: int, nullable: false, description: "Unique identifier"}
+            owner: {
+    type: string
+    nullable: false
+    description: "Repository owner (extracted from JSON or direct)"
+}
+            name: {type: string, nullable: false, description: "Repository name"}
+            full_name: {type: string, nullable: false, description: "Full name (owner/name)"}
+            description: {type: string, nullable: true, description: "Repository description"}
+            url: {type: string, nullable: false, description: "HTML URL to repository"}
+            homepage: {type: string, nullable: true, description: "Project homepage URL"}
+            language: {type: string, nullable: true, description: "Primary programming language"}
+            topics: {
+    type: list<string>
+    nullable: false
+    default: []
+    description: "Repository topics/tags"
+}
+            stars: {type: int, nullable: false, default: 0, description: "Stargazers count"}
+            forks: {type: int, nullable: false, default: 0, description: "Forks count"}
+            issues: {type: int, nullable: false, default: 0, description: "Open issues count"}
+            pushed: {type: datetime, nullable: true, description: "Last push timestamp"}
+            created: {type: datetime, nullable: true, description: "Creation timestamp"}
+            updated: {type: datetime, nullable: true, description: "Last update timestamp"}
+            archived: {
+    type: bool
+    nullable: false
+    default: false
+    description: "Whether repository is archived"
+}
+            fork: {
+    type: bool
+    nullable: false
+    default: false
+    description: "Whether repository is a fork"
+}
+            license: {
+    type: string
+    nullable: true
+    description: "License name (e.g., MIT, Apache-2.0)"
+}
+            readme_excerpt: {type: string, nullable: true, description: "Excerpt from README for search"}
+            source: {
+    type: string
+    nullable: false
+    default: github
+    description: "Data source: github|firefox|chrome|awesome|manual"
+}
+            synced_at: {
+    type: datetime
+    nullable: false
+    description: "When this record was last synced"
+}
+            starred_at: {
+    type: datetime
+    nullable: true
+    description: "When the user starred this repo (from GitHub star+json)"
+}
         }
-        required: [id, owner, name, full_name, url, source, synced_at]
-        version: "1.0.0"
+        required: [id owner name full_name url source synced_at]
+        version: 1.0.0
     }
 }
 
@@ -69,26 +105,26 @@ export def star-schema []: nothing -> record {
 # Returns: record mapping column names to Polars dtype strings
 export def polars-schema []: nothing -> record {
     {
-        id: "i64"
-        owner: "str"
-        name: "str"
-        full_name: "str"
-        description: "str"
-        url: "str"
-        homepage: "str"
-        language: "str"
-        topics: "str"  # JSON-encoded list, parsed at query time
-        stars: "i64"
-        forks: "i64"
-        issues: "i64"
+        id: i64
+        owner: str
+        name: str
+        full_name: str
+        description: str
+        url: str
+        homepage: str
+        language: str
+        topics: str  # JSON-encoded list, parsed at query time
+        stars: i64
+        forks: i64
+        issues: i64
         pushed: "datetime[us]"
         created: "datetime[us]"
         updated: "datetime[us]"
-        archived: "bool"
-        fork: "bool"
-        license: "str"
-        readme_excerpt: "str"
-        source: "str"
+        archived: bool
+        fork: bool
+        license: str
+        readme_excerpt: str
+        source: str
         synced_at: "datetime[us]"
         starred_at: "datetime[us]"
     }
@@ -105,14 +141,14 @@ export def polars-schema []: nothing -> record {
 #
 # Returns: list of column names
 export def default-columns []: nothing -> list<string> {
-    [owner, name, language, stars, pushed, homepage, topics, description, forks, issues]
+    [owner name language stars pushed homepage topics description forks issues]
 }
 
 # Minimal columns for compact display
 #
 # Returns: list of column names for compact output
 export def minimal-columns []: nothing -> list<string> {
-    [owner, name, language, stars]
+    [owner name language stars]
 }
 
 # All available columns
@@ -120,9 +156,9 @@ export def minimal-columns []: nothing -> list<string> {
 # Returns: list of all column names in schema order
 export def all-columns []: nothing -> list<string> {
     [
-        id, owner, name, full_name, description, url, homepage, language,
-        topics, stars, forks, issues, pushed, created, updated, archived,
-        fork, license, readme_excerpt, source, synced_at, starred_at
+        id owner name full_name description url homepage language
+        topics stars forks issues pushed created updated archived
+        fork license readme_excerpt source synced_at starred_at
     ]
 }
 
@@ -137,14 +173,14 @@ export def all-columns []: nothing -> list<string> {
 #
 # Returns: list of language names to exclude
 export def excluded-languages []: nothing -> list<string> {
-    [PHP, "C#", Java, Python, Ruby]
+    [PHP "C#" Java Python Ruby]
 }
 
 # Valid source identifiers
 #
 # Returns: list of valid source values
 export def valid-sources []: nothing -> list<string> {
-    [github, firefox, chrome, awesome, manual]
+    [github firefox chrome awesome manual]
 }
 
 # ============================================================================
@@ -165,7 +201,7 @@ export def valid-sources []: nothing -> list<string> {
 #   parse-topics '["rust", "cli"]'  # => [rust, cli]
 #   parse-topics ["rust", "cli"]    # => [rust, cli]
 #   parse-topics null               # => []
-export def parse-topics [topics: any]: nothing -> list<string> {
+export def parse-topics [topics: any]: any -> any {
     if ($topics == null) {
         return []
     }
@@ -204,9 +240,9 @@ export def parse-topics [topics: any]: nothing -> list<string> {
 #   get-owner-login '{"login": "rust-lang"}'  # => rust-lang
 #   get-owner-login {login: "rust-lang"}      # => rust-lang
 #   get-owner-login "rust-lang"               # => rust-lang
-export def get-owner-login [owner: any]: nothing -> string {
+export def get-owner-login [owner: any] {
     if ($owner == null) {
-        return "unknown"
+        return unknown
     }
 
     let type = $owner | describe | str replace --regex '<.*' ''
@@ -219,13 +255,13 @@ export def get-owner-login [owner: any]: nothing -> string {
                     "unknown"
                 } else if ($trimmed | str starts-with "{") {
                     # JSON object
-                    $trimmed | from json | get login? | default "unknown"
+                    $trimmed | from json | get login? | default unknown
                 } else {
                     # Plain string (already a login name)
                     $trimmed
                 }
             }
-            "record" => { $owner | get login? | default "unknown" }
+            "record" => { $owner | get login? | default unknown }
             _ => { "unknown" }
         }
     } catch {
@@ -256,94 +292,94 @@ export def validate-star [star: record]: nothing -> record<valid: bool, errors: 
     # Check required fields
     for required in $schema.required {
         if not ($required in $star) {
-            $errors = ($errors | append $"Missing required field: ($required)")
+            $errors ++= [$"Missing required field: ($required)"]
         }
     }
 
     # Type validations for present fields
     if "id" in $star {
         let id_type = $star.id | describe
-        if not ($id_type =~ "int") {
-            $errors = ($errors | append $"Field 'id' must be int, got ($id_type)")
+        if not ($id_type =~ int) {
+            $errors ++= [$"Field 'id' must be int, got ($id_type)"]
         }
     }
 
     if "owner" in $star {
         let owner_type = $star.owner | describe | str replace --regex '<.*' ''
-        if $owner_type != "string" {
-            $errors = ($errors | append $"Field 'owner' must be string, got ($owner_type)")
+        if $owner_type != string {
+            $errors ++= [$"Field 'owner' must be string, got ($owner_type)"]
         }
     }
 
     if "name" in $star {
         let name_type = $star.name | describe | str replace --regex '<.*' ''
-        if $name_type != "string" {
-            $errors = ($errors | append $"Field 'name' must be string, got ($name_type)")
+        if $name_type != string {
+            $errors ++= [$"Field 'name' must be string, got ($name_type)"]
         }
     }
 
     if "full_name" in $star {
         let full_name_type = $star.full_name | describe | str replace --regex '<.*' ''
-        if $full_name_type != "string" {
-            $errors = ($errors | append $"Field 'full_name' must be string, got ($full_name_type)")
+        if $full_name_type != string {
+            $errors ++= [$"Field 'full_name' must be string, got ($full_name_type)"]
         }
     }
 
     if "url" in $star {
         let url_type = $star.url | describe | str replace --regex '<.*' ''
-        if $url_type != "string" {
-            $errors = ($errors | append $"Field 'url' must be string, got ($url_type)")
-        } else if not ($star.url | str starts-with "http") {
-            $warnings = ($warnings | append "Field 'url' should start with http:// or https://")
+        if $url_type != string {
+            $errors ++= [$"Field 'url' must be string, got ($url_type)"]
+        } else if not ($star.url | str starts-with http) {
+            $warnings ++= ["Field 'url' should start with http:// or https://"]
         }
     }
 
     if "source" in $star {
         let valid = valid-sources
         if not ($star.source in $valid) {
-            $errors = ($errors | append $"Field 'source' must be one of: ($valid | str join ', ')")
+            $errors ++= [$"Field 'source' must be one of: ($valid | str join ', ')"]
         }
     }
 
     if "stars" in $star {
         let stars_type = $star.stars | describe
-        if not ($stars_type =~ "int") {
-            $warnings = ($warnings | append $"Field 'stars' should be int, got ($stars_type)")
+        if not ($stars_type =~ int) {
+            $warnings ++= [$"Field 'stars' should be int, got ($stars_type)"]
         }
     }
 
     if "forks" in $star {
         let forks_type = $star.forks | describe
-        if not ($forks_type =~ "int") {
-            $warnings = ($warnings | append $"Field 'forks' should be int, got ($forks_type)")
+        if not ($forks_type =~ int) {
+            $warnings ++= [$"Field 'forks' should be int, got ($forks_type)"]
         }
     }
 
     if "issues" in $star {
         let issues_type = $star.issues | describe
-        if not ($issues_type =~ "int") {
-            $warnings = ($warnings | append $"Field 'issues' should be int, got ($issues_type)")
+        if not ($issues_type =~ int) {
+            $warnings ++= [$"Field 'issues' should be int, got ($issues_type)"]
         }
     }
 
     if "archived" in $star {
         let archived_type = $star.archived | describe
-        if $archived_type != "bool" {
-            $warnings = ($warnings | append $"Field 'archived' should be bool, got ($archived_type)")
+        if $archived_type != bool {
+            $warnings ++= [$"Field 'archived' should be bool, got ($archived_type)"]
         }
     }
 
     if "fork" in $star {
         let fork_type = $star.fork | describe
-        if $fork_type != "bool" {
-            $warnings = ($warnings | append $"Field 'fork' should be bool, got ($fork_type)")
+        if $fork_type != bool {
+            $warnings ++= [$"Field 'fork' should be bool, got ($fork_type)"]
         }
     }
 
     if "topics" in $star {
         let topics_type = $star.topics | describe | str replace --regex '<.*' ''
-        if $topics_type not-in ["list", "string"] {
-            $warnings = ($warnings | append $"Field 'topics' should be list or JSON string, got ($topics_type)")
+        if $topics_type not-in [list string] {
+            $warnings ++= [$"Field 'topics' should be list or JSON string, got ($topics_type)"]
         }
     }
 
@@ -369,7 +405,7 @@ export def validate-star [star: record]: nothing -> record<valid: bool, errors: 
 # Example:
 #   $github_repo | normalize-github-star
 export def normalize-github-star [raw: record]: nothing -> record {
-    let owner = get-owner-login ($raw.owner? | default "unknown")
+    let owner = get-owner-login ($raw.owner? | default unknown)
     let license_name = try {
         $raw.license? | default {} | get name? | default null
     } catch { null }
@@ -394,8 +430,8 @@ export def normalize-github-star [raw: record]: nothing -> record {
         fork: ($raw.fork? | default false)
         license: $license_name
         readme_excerpt: null
-        source: "github"
-        synced_at: (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+        source: github
+        synced_at: (date now | format date %Y-%m-%dT%H:%M:%SZ)
         starred_at: null
     }
 }
@@ -427,8 +463,8 @@ export def empty-star []: nothing -> record {
         fork: false
         license: null
         readme_excerpt: null
-        source: "manual"
-        synced_at: (date now | format date "%Y-%m-%dT%H:%M:%SZ")
+        source: manual
+        synced_at: (date now | format date %Y-%m-%dT%H:%M:%SZ)
         starred_at: null
     }
 }

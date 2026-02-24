@@ -20,7 +20,7 @@
 def check-polars-available []: nothing -> bool {
     try {
         # Try to access a polars command - if it fails, plugin not loaded
-        "test" | polars into-df | ignore
+        "test" | polars into-df
         true
     } catch {
         false
@@ -57,7 +57,7 @@ def require-polars []: nothing -> nothing {
 # Example:
 #   [[a b]; [1 2]] | is-polars-type  # false
 #   [[a b]; [1 2]] | polars into-df | is-polars-type  # true
-export def is-polars-type [data: any]: nothing -> bool {
+export def is-polars-type [data: any] {
     let type_name = $data | describe
 
     # Check for Polars type indicators in the description
@@ -123,7 +123,7 @@ export def to-lazyframe [
     } else if ($type_name =~ "(?i)dataframe") {
         # Convert DataFrame to LazyFrame
         $data | polars into-lazy
-    } else if ($type_name == "table" or $type_name =~ "list<") {
+    } else if ($type_name == "table" or $type_name starts-with "table<" or $type_name starts-with "list<") {
         # Convert table to LazyFrame with schema coercion
         table-to-lazy $data
     } else {
@@ -161,7 +161,7 @@ export def to-dataframe [
     } else if ($type_name =~ "(?i)lazyframe") {
         # Collect LazyFrame to DataFrame
         $data | polars collect
-    } else if ($type_name == "table" or $type_name =~ "list<") {
+    } else if ($type_name == "table" or $type_name starts-with "table<" or $type_name starts-with "list<") {
         # Convert table to LazyFrame, then collect
         table-to-lazy $data | polars collect
     } else {
@@ -212,10 +212,8 @@ export def get-schema [
 #
 # Example:
 #   $data | apply-schema {age: i64, created_at: datetime}
-export def apply-schema [
-    data: any          # Data to apply schema to
-    schema: record     # Column name to type mapping
-]: nothing -> any {
+export def apply-schema [data]: record -> any {
+    let schema = $in
     require-polars
 
     let lf = to-lazyframe $data
@@ -243,12 +241,12 @@ export def apply-schema [
                     $acc | polars with-column ((polars col $col_name) | polars cast datetime | polars as $col_name)
                 }
                 _ => {
-                    print --stderr $"Warning: Unknown type '($col_type)' for column '($col_name)', skipping"
+                    error make {msg: $"Warning: Unknown type '($col_type)' for column '($col_name)', skipping"}
                     $acc
                 }
             }
         } catch {
-            print --stderr $"Warning: Failed to cast column '($col_name)' to '($col_type)'"
+            error make {msg: $"Warning: Failed to cast column '($col_name)' to '($col_type)'"}
             $acc
         }
     }

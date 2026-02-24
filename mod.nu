@@ -90,12 +90,24 @@ export use commands/export.nu *
 # ============================================================================
 
 # Storage layer - import specific functions for internal use
-use core/storage.nu [get-paths, load, store, backup, migrate-from-gh-stars, get-stats, ensure-storage, get-sync-meta, set-sync-meta, upsert, remove-unstarred]
+use core/storage.nu [
+    get-paths
+    load
+    store
+    backup
+    migrate-from-gh-stars
+    get-stats
+    ensure-storage
+    get-sync-meta
+    set-sync-meta
+    upsert
+    remove-unstarred
+]
 
 # Formatters - import for internal use
 use formatters/table.nu [format]
-use formatters/json.nu [to-json-output, to-csv-output, to-md-output, to-nuon-output]
-use formatters/dataframe.nu [to-dataframe, to-lazyframe]
+use formatters/json.nu [to-json-output to-csv-output to-md-output to-nuon-output]
+use formatters/dataframe.nu [to-dataframe to-lazyframe]
 
 # Adapters - import for internal use
 use adapters/github.nu [fetch]
@@ -107,7 +119,7 @@ use adapters/github.nu [fetch]
 const MODULE_VERSION = "3.0.0"
 
 # Default excluded languages (can be overridden in config)
-const DEFAULT_EXCLUDED_LANGUAGES = [PHP, "C#", Java, Python, Ruby]
+const DEFAULT_EXCLUDED_LANGUAGES = [PHP "C#" Java Python Ruby]
 
 # Days threshold for considering a repo as stale
 const STALE_DAYS_THRESHOLD = 365
@@ -133,7 +145,7 @@ const DEFAULT_DISPLAY_COLUMNS = [
 # Check if Polars plugin is available
 def polars-available []: nothing -> bool {
     try {
-        [[a]; [1]] | polars into-df | ignore
+        [[a]; [1]] | polars into-df
         true
     } catch {
         false
@@ -155,7 +167,7 @@ def load-config []: nothing -> record {
                     min_pushed_days: $STALE_DAYS_THRESHOLD
                 }
                 columns: $DEFAULT_DISPLAY_COLUMNS
-                sort_by: "stars"
+                sort_by: stars
                 sort_reverse: true
             }
         }
@@ -163,10 +175,7 @@ def load-config []: nothing -> record {
 }
 
 # Apply default filters to data
-def apply-default-filters [
-    data: table
-    config: record
-]: nothing -> table {
+def apply-default-filters [config: record] {
     let filters = $config.defaults?.filters? | default {}
     let exclude_archived = $filters.exclude_archived? | default true
     let exclude_forks = $filters.exclude_forks? | default false
@@ -175,19 +184,17 @@ def apply-default-filters [
 
     let cutoff_date = (date now) - ($min_pushed_days * 1day)
 
-    $data | where {|repo|
-        # Handle archived/fork as int (0/1) from SQLite or bool
-        let is_archived = try {
-            let val = $repo.archived? | default 0
-            if ($val | describe) == "bool" { $val } else { $val == 1 }
+    where let is_archived = try {
+            let val = $it.archived? | default 0
+            if ($val | describe) == bool { $val } else { $val == 1 }
         } catch { false }
         let is_fork = try {
-            let val = $repo.fork? | default 0
-            if ($val | describe) == "bool" { $val } else { $val == 1 }
+            let val = $it.fork? | default 0
+            if ($val | describe) == bool { $val } else { $val == 1 }
         } catch { false }
-        let language = try { $repo.language? | default "" } catch { "" }
+        let language = try { $it.language? | default "" } catch { "" }
         let pushed_at = try {
-            $repo.pushed_at? | default "" | into datetime
+            $it.pushed_at? | default "" | into datetime
         } catch {
             date now
         }
@@ -199,22 +206,17 @@ def apply-default-filters [
         let pass_pushed = $pushed_at > $cutoff_date
 
         $pass_archived and $pass_fork and $pass_language and $pass_pushed
-    }
 }
 
 # Search data by query string
-def search-data [
-    data: table
-    query: string
-]: nothing -> table {
+def search-data [query: string] {
     let query_lower = $query | str downcase
 
-    $data | where {|repo|
-        let name = try { $repo.name? | default "" | str downcase } catch { "" }
-        let full_name = try { $repo.full_name? | default "" | str downcase } catch { "" }
-        let description = try { $repo.description? | default "" | str downcase } catch { "" }
+    where let name = try { $it.name? | default "" | str downcase } catch { "" }
+        let full_name = try { $it.full_name? | default "" | str downcase } catch { "" }
+        let description = try { $it.description? | default "" | str downcase } catch { "" }
         let topics_str = try {
-            let topics = $repo.topics? | default "[]"
+            let topics = $it.topics? | default "[]"
             let type = $topics | describe | str replace --regex '<.*' ''
             match $type {
                 "string" => { $topics | str downcase }
@@ -224,7 +226,6 @@ def search-data [
         } catch { "" }
 
         (($name =~ $query_lower) or ($full_name =~ $query_lower) or ($description =~ $query_lower) or ($topics_str =~ $query_lower))
-    }
 }
 
 # Sort data by field
@@ -256,41 +257,30 @@ def sort-data [
 }
 
 # Format data for output based on flags
-def format-output [
-    data: table
-    config: record
-    columns: list<string>
-    raw: bool
-    json_flag: bool
-    csv_flag: bool
-    md_flag: bool
-    nuon_flag: bool
-    dataframe_flag: bool
-    lazyframe_flag: bool
-]: nothing -> any {
+def format-output [config: any, columns: any, raw: any, json_flag: any, csv_flag: any, md_flag: any, nuon_flag: any, dataframe_flag: any, lazyframe_flag: any] {
     # Raw output - return as-is
     if $raw {
-        return $data
+        return $in
     }
 
     # JSON output
     if $json_flag {
-        return (to-json-output $data --pretty)
+        return (to-json-output $in --pretty)
     }
 
     # CSV output
     if $csv_flag {
-        return (to-csv-output $data)
+        return (to-csv-output $in)
     }
 
     # Markdown output
     if $md_flag {
-        return (to-md-output $data --columns $columns)
+        return (to-md-output $in --columns $columns)
     }
 
     # NUON output
     if $nuon_flag {
-        return (to-nuon-output $data --pretty)
+        return (to-nuon-output $in --pretty)
     }
 
     # DataFrame output
@@ -301,7 +291,7 @@ def format-output [
                 help: "Install nu_plugin_polars: cargo install nu_plugin_polars && plugin add ~/.cargo/bin/nu_plugin_polars"
             }
         }
-        return (to-dataframe $data)
+        return (to-dataframe $in)
     }
 
     # LazyFrame output
@@ -312,11 +302,11 @@ def format-output [
                 help: "Install nu_plugin_polars: cargo install nu_plugin_polars && plugin add ~/.cargo/bin/nu_plugin_polars"
             }
         }
-        return (to-lazyframe $data)
+        return (to-lazyframe $in)
     }
 
     # Default: formatted table
-    $data | format --columns $columns
+    $in | format --columns $columns
 }
 
 # Check for migration from gh-stars on first use
@@ -377,7 +367,7 @@ def check-migration []: nothing -> bool {
 #
 #   # Get Polars DataFrame for analysis
 #   stars --dataframe | polars filter ((polars col language) == "Rust")
-export def main [
+def main [
     query?: string                       # Optional search query
     --json                               # Output as JSON
     --csv                                # Output as CSV
@@ -393,7 +383,7 @@ export def main [
     --reverse (-r)                       # Reverse sort order
 ]: nothing -> any {
     # Check for migration on first use
-    check-migration | ignore
+    check-migration
 
     # Load configuration
     let config = load-config
@@ -514,13 +504,13 @@ export def "stars sync" [
             let backup_path = backup
             print $"Backup created: ($backup_path)"
         } catch {|e|
-            print --stderr $"Warning: Failed to create backup: ($e.msg)"
+            error make {msg: $"Warning: Failed to create backup: ($e.msg)"}
         }
     }
 
     # Determine sync mode
-    let last_synced = get-sync-meta "last_synced_at"
-    let last_full = get-sync-meta "last_full_sync_at"
+    let last_synced = get-sync-meta last_synced_at
+    let last_full = get-sync-meta last_full_sync_at
     let full_interval = $config.sync?.github?.full_sync_interval_days? | default 7
 
     # Auto-escalate to full sync if:
@@ -539,8 +529,8 @@ export def "stars sync" [
     }
 
     let use_cache = not $no_cache
-    let cache_duration = $config.sync?.github?.cache_duration? | default "1h"
-    let now_str = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+    let cache_duration = $config.sync?.github?.cache_duration? | default 1h
+    let now_str = date now | format date %Y-%m-%dT%H:%M:%SZ
 
     if $do_full {
         print "Full sync from GitHub..."
@@ -561,11 +551,11 @@ export def "stars sync" [
         try {
             store $stars --replace
         } catch {|e|
-            error make { msg: $"Failed to save stars: ($e.msg)" }
+            error make {msg: $"Failed to save stars: ($e.msg)"}
         }
 
-        set-sync-meta "last_synced_at" $now_str
-        set-sync-meta "last_full_sync_at" $now_str
+        set-sync-meta last_synced_at $now_str
+        set-sync-meta last_full_sync_at $now_str
 
         let count = $stars | length
         print $"Full sync complete: ($count) stars"
@@ -591,7 +581,7 @@ export def "stars sync" [
             try {
                 upsert $stars
             } catch {|e|
-                error make { msg: $"Failed to save stars: ($e.msg)" }
+                error make {msg: $"Failed to save stars: ($e.msg)"}
             }
 
             let new_count = $stars | length
@@ -599,7 +589,7 @@ export def "stars sync" [
             print $"Synced ($new_count) new/updated stars \(($total) total\)"
         }
 
-        set-sync-meta "last_synced_at" $now_str
+        set-sync-meta last_synced_at $now_str
     }
 }
 
@@ -631,14 +621,14 @@ export def "stars sync github" [
             let backup_path = backup
             print $"Backup created: ($backup_path)"
         } catch {|e|
-            print --stderr $"Warning: Failed to create backup: ($e.msg)"
+            error make {msg: $"Warning: Failed to create backup: ($e.msg)"}
         }
     }
 
     # Determine sync mode
     let config = load-config
-    let last_synced = get-sync-meta "last_synced_at"
-    let last_full = get-sync-meta "last_full_sync_at"
+    let last_synced = get-sync-meta last_synced_at
+    let last_full = get-sync-meta last_full_sync_at
     let full_interval = $config.sync?.github?.full_sync_interval_days? | default 7
 
     let do_full = if $full {
@@ -653,8 +643,8 @@ export def "stars sync github" [
     }
 
     let use_cache = not $no_cache
-    let cache_duration = $config.sync?.github?.cache_duration? | default "1h"
-    let now_str = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+    let cache_duration = $config.sync?.github?.cache_duration? | default 1h
+    let now_str = date now | format date %Y-%m-%dT%H:%M:%SZ
 
     # Helper: build fetch args based on user/cache/since
     if $do_full {
@@ -684,11 +674,11 @@ export def "stars sync github" [
         try {
             store $stars --replace
         } catch {|e|
-            error make { msg: $"Failed to save stars: ($e.msg)" }
+            error make {msg: $"Failed to save stars: ($e.msg)"}
         }
 
-        set-sync-meta "last_synced_at" $now_str
-        set-sync-meta "last_full_sync_at" $now_str
+        set-sync-meta last_synced_at $now_str
+        set-sync-meta last_full_sync_at $now_str
 
         let count = $stars | length
         print $"Full sync complete: ($count) stars from GitHub"
@@ -722,7 +712,7 @@ export def "stars sync github" [
             try {
                 upsert $stars
             } catch {|e|
-                error make { msg: $"Failed to save stars: ($e.msg)" }
+                error make {msg: $"Failed to save stars: ($e.msg)"}
             }
 
             let new_count = $stars | length
@@ -730,7 +720,7 @@ export def "stars sync github" [
             print $"Synced ($new_count) new/updated stars \(($total) total\) from GitHub"
         }
 
-        set-sync-meta "last_synced_at" $now_str
+        set-sync-meta last_synced_at $now_str
     }
 }
 
@@ -763,8 +753,8 @@ export def "stars stats" []: nothing -> record {
     } else {
         $data
         | where { ($in.language? | default "") != "" }
-        | group-by { $in.language? | default "Unknown" }
-        | items {|lang, repos| { language: $lang, count: ($repos | length) }}
+        | group-by { $in.language? | default Unknown }
+        | items {|lang, repos| {language: $lang, count: ($repos | length)} }
         | sort-by count --reverse
         | first 10
     }
@@ -774,8 +764,8 @@ export def "stars stats" []: nothing -> record {
         []
     } else {
         $data
-        | group-by { $in.owner? | default "unknown" }
-        | items {|owner, repos| { owner: $owner, count: ($repos | length) }}
+        | group-by { $in.owner? | default unknown }
+        | items {|owner, repos| {owner: $owner, count: ($repos | length)} }
         | sort-by count --reverse
         | first 10
     }

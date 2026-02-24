@@ -38,7 +38,7 @@ def fetch-from-url [url: string]: nothing -> string {
         }
     }
 
-    if ($result | describe | str replace --regex '<.*' '') == "record" {
+    if ($result | describe | str replace --regex '<.*' '') == record {
         if ($result.exit_code? | default 0) != 0 {
             error make {
                 msg: $"HTTP request failed: ($result.stderr? | default 'Unknown error')"
@@ -94,8 +94,8 @@ def parse-github-url [url: string]: nothing -> record {
     # Normalize the URL
     let normalized = $url
         | str trim
-        | str replace --regex '^http://' 'https://'
-        | str replace --regex '^(github\.com)' 'https://$1'
+        | str replace --regex ^http:// https://
+        | str replace --regex '^(github\.com)' https://$1
 
     # Extract owner/repo from the path
     let match = $normalized | parse --regex 'https://github\.com/([^/]+)/([^/\s#?]+)'
@@ -106,7 +106,7 @@ def parse-github-url [url: string]: nothing -> record {
 
     let owner = $match | first | get capture0
     let repo = $match | first | get capture1
-        | str replace --regex '\.git$' ''  # Remove .git suffix if present
+        | str replace --regex \.git$ ''  # Remove .git suffix if present
 
     # Validate owner and repo names (basic GitHub username/repo name rules)
     if ($owner | is-empty) or ($repo | is-empty) {
@@ -114,7 +114,16 @@ def parse-github-url [url: string]: nothing -> record {
     }
 
     # Skip if it looks like a user profile page (no repo)
-    if $repo in ["followers", "following", "stars", "repositories", "projects", "packages", "sponsoring", "sponsors"] {
+    if $repo in [
+    followers
+    following
+    stars
+    repositories
+    projects
+    packages
+    sponsoring
+    sponsors
+] {
         return null
     }
 
@@ -141,21 +150,21 @@ def extract-github-links [content: string]: nothing -> list<record> {
     # Pattern 1: Markdown links [text](url)
     let md_links = $content | parse --regex '\[([^\]]+)\]\((https?://github\.com/[^\s\)]+)\)'
     for link in $md_links {
-        $links = ($links | append {
+        $links ++= [{
             url: $link.capture1
             text: $link.capture0
-            format: "markdown"
-        })
+            format: markdown
+        }]
     }
 
     # Pattern 2: Markdown links with github.com (no protocol)
     let md_links_no_proto = $content | parse --regex '\[([^\]]+)\]\((github\.com/[^\s\)]+)\)'
     for link in $md_links_no_proto {
-        $links = ($links | append {
+        $links ++= [{
             url: $"https://($link.capture1)"
             text: $link.capture0
-            format: "markdown"
-        })
+            format: markdown
+        }]
     }
 
     # Pattern 3: Bare URLs (not inside markdown link syntax)
@@ -173,12 +182,12 @@ def extract-github-links [content: string]: nothing -> list<record> {
         | flatten
 
     for link in $bare_links {
-        let url = $link.capture0 | str trim --char '.' | str trim --char ','
-        $links = ($links | append {
+        let url = $link.capture0 | str trim --char . | str trim --char ,
+        $links ++= [{
             url: $url
             text: ""
-            format: "bare"
-        })
+            format: bare
+        }]
     }
 
     # Pattern 4: github.com without protocol (bare)
@@ -194,12 +203,12 @@ def extract-github-links [content: string]: nothing -> list<record> {
         | flatten
 
     for link in $bare_no_proto {
-        let url = $"https://($link.capture0)" | str trim --char '.' | str trim --char ','
-        $links = ($links | append {
+        let url = $"https://($link.capture0)" | str trim --char . | str trim --char ,
+        $links ++= [{
             url: $url
             text: ""
-            format: "bare"
-        })
+            format: bare
+        }]
     }
 
     # Deduplicate by URL, keeping the first occurrence (which likely has the best text)
@@ -221,7 +230,7 @@ def normalize-link [link: record]: nothing -> record {
         return null
     }
 
-    let synced_at = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+    let synced_at = date now | format date %Y-%m-%dT%H:%M:%SZ
     let full_name = $"($parsed.owner)/($parsed.repo)"
     let html_url = $"https://github.com/($full_name)"
 
@@ -257,9 +266,9 @@ def normalize-link [link: record]: nothing -> record {
         open_issues_count: 0
         license: null
         topics: "[]"
-        visibility: "public"
-        default_branch: "main"
-        source: "awesome"
+        visibility: public
+        default_branch: main
+        source: awesome
         synced_at: $synced_at
     }
 }
@@ -330,12 +339,12 @@ export def fetch [
     }
 
     # Determine if source is URL or local path
-    let is_url = ($source | str starts-with "http://") or ($source | str starts-with "https://")
+    let is_url = ($source | str starts-with http://) or ($source | str starts-with https://)
 
     let content = if $is_url {
         # Transform GitHub blob URLs to raw URLs for direct access
         let raw_url = $source
-            | str replace --regex 'github\.com/([^/]+)/([^/]+)/blob/' 'raw.githubusercontent.com/$1/$2/'
+            | str replace --regex 'github\.com/([^/]+)/([^/]+)/blob/' raw.githubusercontent.com/$1/$2/
 
         fetch-from-url $raw_url
     } else {
@@ -345,7 +354,7 @@ export def fetch [
     let stars = parse-markdown $content
 
     if ($stars | is-empty) {
-        print --stderr $"Warning: No GitHub links found in ($source)"
+        error make {msg: $"Warning: No GitHub links found in ($source)"}
     }
 
     $stars
@@ -391,7 +400,7 @@ export def enrich [
 
     for batch in $batches {
         for star in $batch {
-            $current = $current + 1
+            $current += 1
             let full_name = $star.full_name
 
             # Fetch repo data from GitHub API
@@ -410,7 +419,7 @@ export def enrich [
 
                 if ($repo_data != null) {
                     # Merge GitHub data with our record
-                    let synced_at = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+                    let synced_at = date now | format date %Y-%m-%dT%H:%M:%SZ
                     let license_name = try {
                         $repo_data.license? | get name? | default null
                     } catch { null }
@@ -418,7 +427,7 @@ export def enrich [
                         $repo_data.topics? | default [] | to json --raw
                     } catch { "[]" }
 
-                    $enriched = ($enriched | append {
+                    $enriched ++= [{
                         id: ($repo_data.id? | default 0)
                         node_id: ($repo_data.node_id? | default "")
                         name: ($repo_data.name? | default $star.name)
@@ -443,18 +452,18 @@ export def enrich [
                         open_issues_count: ($repo_data.open_issues_count? | default 0)
                         license: $license_name
                         topics: $topics
-                        visibility: ($repo_data.visibility? | default "public")
-                        default_branch: ($repo_data.default_branch? | default "main")
-                        source: "awesome"
+                        visibility: ($repo_data.visibility? | default public)
+                        default_branch: ($repo_data.default_branch? | default main)
+                        source: awesome
                         synced_at: $synced_at
-                    })
+                    }]
                 } else {
                     # Keep original record if parse failed
-                    $enriched = ($enriched | append $star)
+                    $enriched ++= [$star]
                 }
             } else {
                 # Keep original record if API call failed (repo might be deleted/private)
-                $enriched = ($enriched | append $star)
+                $enriched ++= [$star]
             }
         }
 
@@ -541,10 +550,10 @@ export def validate [
         }
 
         if $result.exit_code == 0 {
-            $valid = ($valid | append $star)
+            $valid ++= [$star]
         } else {
-            $invalid = ($invalid | append $star)
-            $errors = ($errors | append $"($star.full_name): ($result.stderr? | default 'not found')")
+            $invalid ++= [$star]
+            $errors ++= [$"($star.full_name): ($result.stderr? | default 'not found')"]
         }
     }
 

@@ -38,7 +38,7 @@ def parse-github-url [
     url: string
 ]: nothing -> record {
     # Skip non-GitHub URLs
-    if not ($url =~ "github\\.com") {
+    if not ($url =~ github\.com) {
         return null
     }
 
@@ -57,14 +57,14 @@ def parse-github-url [
     }
 
     let owner = $captures | get capture0
-    let name = $captures | get capture1 | str replace --regex '\\.git$' ''
+    let name = $captures | get capture1 | str replace --regex \\.git$ ''
 
     # Skip special GitHub pages that aren't repos
     let excluded_owners = [
-        "settings" "notifications" "pulls" "issues" "explore"
-        "trending" "collections" "sponsors" "login" "signup"
-        "marketplace" "features" "pricing" "enterprise" "team"
-        "security" "customer-stories" "readme" "topics" "search"
+        settings notifications pulls issues explore
+        trending collections sponsors login signup
+        marketplace features pricing enterprise team
+        security customer-stories readme topics search
     ]
 
     if $owner in $excluded_owners {
@@ -73,8 +73,8 @@ def parse-github-url [
 
     # Skip special paths that look like repos but aren't
     let excluded_names = [
-        "stars" "followers" "following" "repositories" "projects"
-        "packages" "sponsoring" "achievements" "settings"
+        stars followers following repositories projects
+        packages sponsoring achievements settings
     ]
 
     if $name in $excluded_names {
@@ -97,11 +97,7 @@ def parse-github-url [
 #   node: record - Chrome bookmark node (folder or url)
 #   folder_filter: string - Optional folder name to filter by
 #   current_path: list<string> - Current folder path (for tracking)
-def extract-from-node [
-    node: record
-    folder_filter?: string
-    current_path: list<string> = []
-]: nothing -> list {
+def extract-from-node [node: record, folder_filter?: string, ...current_path: string]: any -> any {
     let node_type = $node.type? | default ""
 
     match $node_type {
@@ -118,7 +114,7 @@ def extract-from-node [
                     name: ($node.name? | default "")
                     url: ($node.url? | default "")
                     date_added: ($node.date_added? | default null)
-                    folder_path: ($current_path | str join "/")
+                    folder_path: ($current_path | str join /)
                 }]
             } else {
                 []
@@ -130,7 +126,7 @@ def extract-from-node [
             let children = $node.children? | default []
 
             $children | each {|child|
-                extract-from-node $child $folder_filter $new_path
+                extract-from-node $child $folder_filter ...$new_path
             } | flatten
         }
         _ => { [] }
@@ -171,7 +167,7 @@ def parse-bookmarks [
     let roots = $bookmarks_data.roots? | default {}
 
     # Extract from all root folders
-    let all_bookmarks = [
+    [
         ($roots.bookmark_bar? | default {})
         ($roots.other? | default {})
         ($roots.synced? | default {})
@@ -179,11 +175,9 @@ def parse-bookmarks [
         if ($root | is-empty) {
             []
         } else {
-            extract-from-node $root $folder []
+            extract-from-node $root $folder 
         }
     } | flatten
-
-    $all_bookmarks
 }
 
 # Normalize a Chrome bookmark to our star schema
@@ -196,7 +190,7 @@ def parse-bookmarks [
 def normalize-bookmark [
     bookmark: record
 ]: nothing -> record {
-    let synced_at = date now | format date "%Y-%m-%dT%H:%M:%SZ"
+    let synced_at = date now | format date %Y-%m-%dT%H:%M:%SZ
 
     # Parse date_added from Chrome's microseconds-since-epoch format
     # Chrome uses microseconds since Jan 1, 1601 (Windows FILETIME)
@@ -212,7 +206,7 @@ def normalize-bookmark [
 
             # Only convert if positive (valid date after 1970)
             if $unix_secs > 0 {
-                $unix_secs * 1sec | into datetime | format date "%Y-%m-%dT%H:%M:%SZ"
+                $unix_secs * 1sec | into datetime | format date %Y-%m-%dT%H:%M:%SZ
             } else {
                 null
             }
@@ -224,7 +218,7 @@ def normalize-bookmark [
         node_id: ""
         name: ($bookmark.name? | default "")
         full_name: ($bookmark.full_name? | default "")
-        owner: ($bookmark.owner? | default "unknown")
+        owner: ($bookmark.owner? | default unknown)
         private: false
         html_url: ($bookmark.url? | default "")
         description: null
@@ -244,9 +238,9 @@ def normalize-bookmark [
         open_issues_count: 0
         license: null
         topics: "[]"
-        visibility: "public"
-        default_branch: "main"
-        source: "chrome"
+        visibility: public
+        default_branch: main
+        source: chrome
         synced_at: $synced_at
         folder_path: ($bookmark.folder_path? | default "")
     }
@@ -277,12 +271,12 @@ export def find-bookmarks-file []: nothing -> path {
         ($home | path join .config google-chrome-beta Default Bookmarks)
         ($home | path join .config google-chrome-unstable Default Bookmarks)
         # macOS - Chrome
-        ($home | path join "Library" "Application Support" "Google" "Chrome" "Default" "Bookmarks")
+        ($home | path join Library "Application Support" Google Chrome Default Bookmarks)
         # macOS - Chromium
-        ($home | path join "Library" "Application Support" "Chromium" "Default" "Bookmarks")
+        ($home | path join Library "Application Support" Chromium Default Bookmarks)
         # macOS - Chrome Beta/Dev/Canary
-        ($home | path join "Library" "Application Support" "Google" "Chrome Beta" "Default" "Bookmarks")
-        ($home | path join "Library" "Application Support" "Google" "Chrome Canary" "Default" "Bookmarks")
+        ($home | path join Library "Application Support" Google "Chrome Beta" Default Bookmarks)
+        ($home | path join Library "Application Support" Google "Chrome Canary" Default Bookmarks)
         # Snap Chrome (Linux)
         ($home | path join snap chromium common chromium Default Bookmarks)
         # Flatpak Chrome (Linux)
@@ -290,12 +284,15 @@ export def find-bookmarks-file []: nothing -> path {
     ]
 
     # Find the first existing file
-    let found = $search_paths | where {|p| $p | path exists } | first
+    let found = $search_paths | where $it | path exists | first
 
     if ($found | is-empty) or ($found == null) {
         error make {
             msg: "Chrome/Chromium Bookmarks file not found"
-            label: {text: "no bookmarks file in standard locations", span: (metadata $search_paths).span}
+            label: {
+    text: "no bookmarks file in standard locations"
+    span: (metadata $search_paths).span
+}
             help: "Use --file to specify the Bookmarks file path manually"
         }
     }
@@ -313,11 +310,8 @@ export def find-bookmarks-file []: nothing -> path {
 #
 # Example:
 #   $bookmarks | extract-github-repos
-export def extract-github-repos [
-    bookmarks: table
-]: nothing -> table {
-    $bookmarks
-    | each {|bookmark|
+export def extract-github-repos []: nothing -> table {
+    each {|bookmark|
         let parsed = parse-github-url ($bookmark.url? | default "")
 
         if ($parsed == null) {
@@ -326,7 +320,7 @@ export def extract-github-repos [
             $bookmark | merge $parsed
         }
     }
-    | where {|b| $b != null }
+    | where $it != null
     | uniq-by full_name
 }
 
@@ -369,7 +363,7 @@ export def fetch [
     let all_bookmarks = parse-bookmarks $bookmarks_path $folder
 
     if ($all_bookmarks | is-empty) {
-        print --stderr "No bookmarks found"
+        error make {msg: ""No bookmarks found""}
         return []
     }
 
@@ -377,7 +371,7 @@ export def fetch [
     let github_bookmarks = extract-github-repos $all_bookmarks
 
     if ($github_bookmarks | is-empty) {
-        print --stderr "No GitHub repository bookmarks found"
+        error make {msg: ""No GitHub repository bookmarks found""}
         return []
     }
 
@@ -471,9 +465,9 @@ export def list-folders [
     def extract-folders [node: record, path: list<string> = [], depth: int = 0]: nothing -> list {
         let node_type = $node.type? | default ""
 
-        if $node_type == "folder" {
+        if $node_type == folder {
             let folder_name = $node.name? | default ""
-            let full_path = $path | append $folder_name | str join "/"
+            let full_path = $path | append $folder_name | str join /
             let children = $node.children? | default []
 
             let this_folder = if ($folder_name | is-empty) {
@@ -483,8 +477,8 @@ export def list-folders [
                     name: $folder_name
                     path: $full_path
                     depth: $depth
-                    bookmark_count: ($children | where type == "url" | length)
-                    subfolder_count: ($children | where type == "folder" | length)
+                    bookmark_count: ($children | where type == url | length)
+                    subfolder_count: ($children | where type == folder | length)
                 }]
             }
 
