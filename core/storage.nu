@@ -353,7 +353,7 @@ export def migrate-from-gh-stars []: nothing -> bool {
 
     # Skip if new database already exists
     if ($paths.db_path | path exists) {
-        error make {msg: ""New database already exists, skipping migration""}
+        error make {msg: "New database already exists, skipping migration"}
         return false
     }
 
@@ -372,7 +372,7 @@ export def migrate-from-gh-stars []: nothing -> bool {
     }
 
     if ($old_data | is-empty) {
-        error make {msg: ""Old database is empty, nothing to migrate""}
+        error make {msg: "Old database is empty, nothing to migrate"}
         return false
     }
 

@@ -354,10 +354,56 @@ export def fetch [
     let stars = parse-markdown $content
 
     if ($stars | is-empty) {
-        error make {msg: $"Warning: No GitHub links found in ($source)"}
+        error make {
+            msg: $"Warning: No GitHub links found in ($source)"
+            label: {text: "no links found", span: (metadata $source).span}
+        }
     }
 
     $stars
+}
+
+# Build an enriched star record from GitHub API repo data and the original star
+def build-enriched-record [
+    repo_data: record
+    star: record
+    full_name: string
+]: nothing -> record {
+    let synced_at = date now | format date %Y-%m-%dT%H:%M:%SZ
+    let license_obj = $repo_data.license? | default null
+    let license_name = if ($license_obj == null) { null } else { $license_obj | get name? | default null }
+    let topics = $repo_data.topics? | default [] | to json --raw
+
+    {
+        id: ($repo_data.id? | default 0)
+        node_id: ($repo_data.node_id? | default "")
+        name: ($repo_data.name? | default $star.name)
+        full_name: ($repo_data.full_name? | default $full_name)
+        owner: ($repo_data.owner?.login? | default $star.owner)
+        private: ($repo_data.private? | default false)
+        html_url: ($repo_data.html_url? | default $star.html_url)
+        description: ($repo_data.description? | default $star.description)
+        fork: ($repo_data.fork? | default false)
+        url: ($repo_data.url? | default $star.url)
+        created_at: ($repo_data.created_at? | default null)
+        updated_at: ($repo_data.updated_at? | default null)
+        pushed_at: ($repo_data.pushed_at? | default null)
+        homepage: ($repo_data.homepage? | default null)
+        size: ($repo_data.size? | default 0)
+        stargazers_count: ($repo_data.stargazers_count? | default 0)
+        watchers_count: ($repo_data.watchers_count? | default 0)
+        language: ($repo_data.language? | default null)
+        forks_count: ($repo_data.forks_count? | default 0)
+        archived: ($repo_data.archived? | default false)
+        disabled: ($repo_data.disabled? | default false)
+        open_issues_count: ($repo_data.open_issues_count? | default 0)
+        license: $license_name
+        topics: $topics
+        visibility: ($repo_data.visibility? | default public)
+        default_branch: ($repo_data.default_branch? | default main)
+        source: awesome
+        synced_at: $synced_at
+    }
 }
 
 # Enrich star records with data from GitHub API
@@ -387,6 +433,7 @@ export def enrich [
     if $gh_check == 0 {
         error make {
             msg: "gh CLI not found"
+            label: {text: "gh not in PATH", span: (metadata $stars).span}
             help: "Install gh CLI from https://cli.github.com/ for enrichment"
         }
     }
@@ -419,44 +466,7 @@ export def enrich [
 
                 if ($repo_data != null) {
                     # Merge GitHub data with our record
-                    let synced_at = date now | format date %Y-%m-%dT%H:%M:%SZ
-                    let license_name = try {
-                        $repo_data.license? | get name? | default null
-                    } catch { null }
-                    let topics = try {
-                        $repo_data.topics? | default [] | to json --raw
-                    } catch { "[]" }
-
-                    $enriched ++= [{
-                        id: ($repo_data.id? | default 0)
-                        node_id: ($repo_data.node_id? | default "")
-                        name: ($repo_data.name? | default $star.name)
-                        full_name: ($repo_data.full_name? | default $full_name)
-                        owner: ($repo_data.owner?.login? | default $star.owner)
-                        private: ($repo_data.private? | default false)
-                        html_url: ($repo_data.html_url? | default $star.html_url)
-                        description: ($repo_data.description? | default $star.description)
-                        fork: ($repo_data.fork? | default false)
-                        url: ($repo_data.url? | default $star.url)
-                        created_at: ($repo_data.created_at? | default null)
-                        updated_at: ($repo_data.updated_at? | default null)
-                        pushed_at: ($repo_data.pushed_at? | default null)
-                        homepage: ($repo_data.homepage? | default null)
-                        size: ($repo_data.size? | default 0)
-                        stargazers_count: ($repo_data.stargazers_count? | default 0)
-                        watchers_count: ($repo_data.watchers_count? | default 0)
-                        language: ($repo_data.language? | default null)
-                        forks_count: ($repo_data.forks_count? | default 0)
-                        archived: ($repo_data.archived? | default false)
-                        disabled: ($repo_data.disabled? | default false)
-                        open_issues_count: ($repo_data.open_issues_count? | default 0)
-                        license: $license_name
-                        topics: $topics
-                        visibility: ($repo_data.visibility? | default public)
-                        default_branch: ($repo_data.default_branch? | default main)
-                        source: awesome
-                        synced_at: $synced_at
-                    }]
+                    $enriched ++= [build-enriched-record $repo_data $star $full_name]
                 } else {
                     # Keep original record if parse failed
                     $enriched ++= [$star]
@@ -534,6 +544,7 @@ export def validate [
     if $gh_check == 0 {
         error make {
             msg: "gh CLI not found"
+            label: {text: "gh not in PATH", span: (metadata $stars).span}
             help: "Install gh CLI from https://cli.github.com/ for validation"
         }
     }

@@ -95,15 +95,19 @@ def parse-github-url [
 #
 # Parameters:
 #   node: record - Chrome bookmark node (folder or url)
-#   folder_filter: string - Optional folder name to filter by
-#   current_path: list<string> - Current folder path (for tracking)
-def extract-from-node [node: record, folder_filter?: string, ...current_path: string]: any -> any {
+#   ctx: record  - Context with folder_filter (string|null) and current_path (list<string>)
+def extract-from-node [
+    node: record
+    ctx: record
+]: nothing -> list {
     let node_type = $node.type? | default ""
+    let folder_filter = $ctx.folder_filter? | default null
+    let current_path = $ctx.current_path? | default []
 
     match $node_type {
         "url" => {
             # Check if we're in the right folder (if filter specified)
-            let in_folder = if ($folder_filter | is-empty) or ($folder_filter == null) {
+            let in_folder = if ($folder_filter == null) or ($folder_filter | is-empty) {
                 true
             } else {
                 $folder_filter in $current_path
@@ -126,7 +130,7 @@ def extract-from-node [node: record, folder_filter?: string, ...current_path: st
             let children = $node.children? | default []
 
             $children | each {|child|
-                extract-from-node $child $folder_filter ...$new_path
+                extract-from-node $child {folder_filter: $folder_filter, current_path: $new_path}
             } | flatten
         }
         _ => { [] }
@@ -175,7 +179,7 @@ def parse-bookmarks [
         if ($root | is-empty) {
             []
         } else {
-            extract-from-node $root $folder 
+            extract-from-node $root {folder_filter: $folder, current_path: []}
         }
     } | flatten
 }
@@ -310,7 +314,7 @@ export def find-bookmarks-file []: nothing -> path {
 #
 # Example:
 #   $bookmarks | extract-github-repos
-export def extract-github-repos []: nothing -> table {
+export def extract-github-repos []: table -> table {
     each {|bookmark|
         let parsed = parse-github-url ($bookmark.url? | default "")
 
@@ -360,18 +364,25 @@ export def fetch [
     }
 
     # Parse bookmarks
-    let all_bookmarks = parse-bookmarks $bookmarks_path $folder
+    let folder_filter = if ($folder == null) or ($folder | is-empty) { null } else { $folder }
+    let all_bookmarks = parse-bookmarks $bookmarks_path $folder_filter
 
     if ($all_bookmarks | is-empty) {
-        error make {msg: ""No bookmarks found""}
+        error make {
+            msg: "No bookmarks found"
+            label: {text: "empty bookmarks", span: (metadata $bookmarks_path).span}
+        }
         return []
     }
 
     # Extract GitHub repos
-    let github_bookmarks = extract-github-repos $all_bookmarks
+    let github_bookmarks = $all_bookmarks | extract-github-repos
 
     if ($github_bookmarks | is-empty) {
-        error make {msg: ""No GitHub repository bookmarks found""}
+        error make {
+            msg: "No GitHub repository bookmarks found"
+            label: {text: "no GitHub repos", span: (metadata $bookmarks_path).span}
+        }
         return []
     }
 
@@ -419,7 +430,7 @@ export def check-available []: nothing -> record<available: bool, file_path: pat
     }
 
     let github_bookmarks = try {
-        extract-github-repos $bookmarks
+        $bookmarks | extract-github-repos
     } catch {
         []
     }
@@ -462,8 +473,13 @@ export def list-folders [
     }
 
     # Recursive folder extraction
-    def extract-folders [node: record, path: list<string> = [], depth: int = 0]: nothing -> list {
+    def extract-folders [
+        node: record
+        ctx: record = {path: [], depth: 0}
+    ]: nothing -> list {
         let node_type = $node.type? | default ""
+        let path = $ctx.path? | default []
+        let depth = $ctx.depth? | default 0
 
         if $node_type == folder {
             let folder_name = $node.name? | default ""
@@ -483,7 +499,7 @@ export def list-folders [
             }
 
             let child_folders = $children | each {|child|
-                extract-folders $child ($path | append $folder_name) ($depth + 1)
+                extract-folders $child {path: ($path | append $folder_name), depth: ($depth + 1)}
             } | flatten
 
             $this_folder | append $child_folders
@@ -502,7 +518,7 @@ export def list-folders [
         if ($root | is-empty) {
             []
         } else {
-            extract-folders $root [] 0
+            extract-folders $root {path: [], depth: 0}
         }
     } | flatten
 }

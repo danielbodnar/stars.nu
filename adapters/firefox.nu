@@ -22,13 +22,53 @@
 # Internal Helpers
 # ============================================================================
 
-# Ensure a directory exists, creating it if necessary
-def generate-id []: nothing -> int {
-    # Simple hash: sum of char codes modulo max int
-    split chars | each {|c| $c | into binary | first } | math sum
-}
+# ============================================================================
+# Public API
+# ============================================================================
 
-    let github_repos = extract-github-repos $raw_bookmarks
+# Check if Firefox bookmarks (places.sqlite) are available
+#
+# Returns status information about Firefox bookmarks availability.
+#
+# Example:
+#   let status = check-available
+#   if $status.available {
+#       print $"Found ($status.bookmark_count) bookmarks"
+#   }
+export def check-available []: nothing -> record {
+    let home = $nu.home-dir
+    let mozilla_path = $home | path join .mozilla firefox
+
+    let places_db = if ($mozilla_path | path exists) {
+        let profiles = try {
+            ls ($mozilla_path | path join "*.default*") | get name | first
+        } catch { null }
+        if ($profiles != null) {
+            $profiles | path join places.sqlite
+        } else {
+            null
+        }
+    } else {
+        null
+    }
+
+    if ($places_db == null) or not ($places_db | path exists) {
+        return {
+            available: false
+            places_db: ""
+            bookmark_count: 0
+            folder_count: 0
+            message: "Firefox places.sqlite not found in standard locations"
+        }
+    }
+
+    let raw_bookmarks = try {
+        open $places_db | query db "SELECT url, title FROM moz_bookmarks JOIN moz_places ON moz_bookmarks.fk = moz_places.id WHERE url LIKE '%github.com%'"
+    } catch {
+        []
+    }
+
+    let github_repos = $raw_bookmarks | extract-github-repos
     let folder_count = $github_repos | get folder | uniq | length
 
     {
@@ -38,4 +78,35 @@ def generate-id []: nothing -> int {
         folder_count: $folder_count
         message: $"Found ($github_repos | length) GitHub bookmarks in ($folder_count) folders"
     }
+}
+
+# Extract GitHub repository URLs from a list of bookmark records
+#
+# Filters bookmarks to only those pointing to GitHub repositories.
+#
+# Example:
+#   $bookmarks | extract-github-repos
+export def extract-github-repos []: table -> table {
+    each {|bookmark|
+        let url = $bookmark.url? | default ""
+        if not ($url =~ 'github\.com/[^/]+/[^/]+') {
+            null
+        } else {
+            let match = $url | parse --regex 'github\.com/([^/]+)/([^/?#\s]+)'
+            if ($match | is-empty) {
+                null
+            } else {
+                let owner = $match | first | get capture0
+                let name = $match | first | get capture1 | str replace --regex '\.git$' ''
+                {
+                    url: $url
+                    name: ($bookmark.title? | default $name)
+                    owner: $owner
+                    repo: $name
+                    full_name: $"($owner)/($name)"
+                    folder: ($bookmark.folder? | default "")
+                }
+            }
+        }
+    } | compact | uniq-by full_name
 }

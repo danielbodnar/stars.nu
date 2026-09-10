@@ -28,10 +28,12 @@
 #   cache_duration: string - Cache TTL (e.g., "1h", "30m")
 def fetch-page [
     url: string
-    use_cache: bool
-    cache_duration: string
-    accept_header: string = "application/vnd.github+json"
-]: nothing -> list {
+    opts: record
+]: nothing -> list<any> {
+    let use_cache = $opts.use_cache? | default false
+    let cache_duration = $opts.cache_duration? | default 1h
+    let accept_header = $opts.accept_header? | default application/vnd.github+json
+
     let result = if $use_cache {
         gh api $url --cache $cache_duration --header $"Accept: ($accept_header)" | complete
     } else {
@@ -76,7 +78,11 @@ def fetch-page [
 #
 # Parameters:
 #   page_data: list - Raw list of repository objects from GitHub API
-def process-page [...page_data: list<any>] {
+#   --starred   - When set, treat items as star+json envelope with starred_at field
+def process-page [
+    ...page_data: list<any>
+    --starred   # Treat items as star+json envelope (has starred_at field)
+]: nothing -> list<any> {
     if $starred {
         $page_data | each {|item|
             normalize-repo ($item.repo? | default $item) --starred-at ($item.starred_at? | default null)
@@ -89,48 +95,19 @@ def process-page [...page_data: list<any>] {
 # Extract owner login from owner object or string
 #
 # Handles both record format (from API) and string format (from stored data).
-def get-owner-login [owner: string] {
+def get-owner-login [owner: record]: nothing -> string {
     try {
-        let type = $owner | describe | str replace --regex '<.*' ''
-        match $type {
-            "string" => { $owner | from json | get login }
-            "record" => { $owner | get login }
-            _ => { "unknown" }
-        }
-    } catch { "unknown" }
+        $owner | get login? | default unknown
+    } catch { unknown }
 }
 
-# Extract license name from license object or return null
-def get-license-name [license: int] {
+# Extract license name from license record or return null
+def get-license-name [license: record]: nothing -> string {
     try {
-        if ($license | is-empty) or ($license == null) {
-            return null
-        }
-
-        let type = $license | describe | str replace --regex '<.*' ''
-        match $type {
-            "string" => {
-                let parsed = $license | from json
-                $parsed | get name? | default null
-            }
-            "record" => { $license | get name? | default null }
-            _ => { null }
-        }
-    } catch { null }
+        $license | get name? | default ""
+    } catch { "" }
 }
 
-# Parse topics from array or JSON string
-def parse-topics [topics: any] {
-    try {
-        let type = $topics | describe | str replace --regex '<.*' ''
-        let topic_list = match $type {
-            "string" => { $topics | default "[]" | from json }
-            "list" => { $topics | default [] }
-            _ => { [] }
-        }
-        $topic_list | to json --raw
-    } catch { "[]" }
-}
 
 # ============================================================================
 # Public API
@@ -175,13 +152,13 @@ export def normalize-repo [
         archived: ($repo.archived? | default false)
         disabled: ($repo.disabled? | default false)
         open_issues_count: ($repo.open_issues_count? | default 0)
-        license: (get-license-name ($repo.license? | default null))
-        topics: (parse-topics ($repo.topics? | default []))
+        license: (if ($repo.license? | is-empty) { null } else { get-license-name $repo.license })
+        topics: (try { $repo.topics? | default [] | to json --raw } catch { "[]" })
         visibility: ($repo.visibility? | default public)
         default_branch: ($repo.default_branch? | default main)
         source: github
         synced_at: $synced_at
-        starred_at: ($starred_at | default null)
+        starred_at: (if ($starred_at == null) or ($starred_at | is-empty) { null } else { $starred_at })
     }
 }
 
@@ -231,7 +208,7 @@ export def fetch [
 
         # Fetch and process the page
         let page_data = try {
-            fetch-page $url $use_cache $cache_duration $accept
+            fetch-page $url {use_cache: $use_cache, cache_duration: $cache_duration, accept_header: $accept}
         } catch {|e|
             # On first page error, propagate it
             if $state.page == 1 {
@@ -264,8 +241,11 @@ export def fetch [
                     let oldest = $oldest_str | into datetime
                     if $oldest < $since_dt {
                         # Filter to only items newer than since, then stop
-                        let new_only = $normalized | where let sa = $it.starred_at | default ""
+                        let since_filter = {|it|
+                            let sa = $it.starred_at | default ""
                             ($sa == "") or (($sa | into datetime) >= $since_dt)
+                        }
+                        let new_only = $normalized | where $since_filter
                         let new_total = $state.total + ($new_only | length)
                         {out: {stars: $new_only, total: $new_total, done: true}}
                     } else {
@@ -336,6 +316,7 @@ export def get-authenticated-user []: nothing -> string {
     } catch {
         error make {
             msg: "Failed to get authenticated user"
+            label: {text: "JSON parse failed", span: (metadata $result).span}
             help: "Check your gh CLI configuration with 'gh auth status'"
         }
     }

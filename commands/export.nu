@@ -79,9 +79,11 @@ def transform-repo-for-export [repo: record]: nothing -> record {
 
 # Filter stars based on archive and fork options
 def filter-stars [include_archived, include_forks]: nothing -> table {
-    where let is_archived = ($it.archived? | default 0) == 1
+    filter {|it|
+        let is_archived = ($it.archived? | default 0) == 1
         let is_fork = ($it.fork? | default 0) == 1
         (not $is_archived or $include_archived) and (not $is_fork or $include_forks)
+    }
 }
 
 # ============================================================================
