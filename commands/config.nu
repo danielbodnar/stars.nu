@@ -88,7 +88,7 @@ def load-config []: nothing -> record {
     try {
         open $config_path | from nuon
     } catch {|e|
-        error make {msg: $"Warning: Failed to load config, using defaults: ($e.msg)"}
+        print --stderr $"Warning: Failed to load config, using defaults: ($e.msg)"
         get-default-config
     }
 }
@@ -140,7 +140,11 @@ def get-nested-value [
 }
 
 # Set a nested value using dot notation
-def set-nested-value [data: record, key: string, value: record] {
+def set-nested-value [
+    data: record
+    key: string
+    value: any
+]: nothing -> record {
     let parts = $key | split row .
 
     if ($parts | length) == 1 {

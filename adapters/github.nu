@@ -31,7 +31,7 @@ def fetch-page [
     opts: record
 ]: nothing -> list<any> {
     let use_cache = $opts.use_cache? | default false
-    let cache_duration = $opts.cache_duration? | default 1h
+    let cache_duration = $opts.cache_duration? | default "1h"
     let accept_header = $opts.accept_header? | default application/vnd.github+json
 
     let result = if $use_cache {

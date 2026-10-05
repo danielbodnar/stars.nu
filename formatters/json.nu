@@ -25,7 +25,7 @@
 # ============================================================================
 
 # Parse topics from JSON string or list to ensure consistent list format
-def parse-topics-internal [topics: string]: any -> any {
+def parse-topics-internal [topics: any]: nothing -> list<string> {
     if ($topics | is-empty) { return [] }
 
     let type = $topics | describe | str replace --regex '<.*' ''
@@ -39,7 +39,7 @@ def parse-topics-internal [topics: string]: any -> any {
 }
 
 # Extract owner login from owner field (handles JSON string or record)
-def get-owner-login-internal [owner: string] {
+def get-owner-login-internal [owner: any]: nothing -> string {
     if ($owner | is-empty) { return unknown }
 
     let type = $owner | describe | str replace --regex '<.*' ''
@@ -55,7 +55,7 @@ def get-owner-login-internal [owner: string] {
 }
 
 # Format datetime to ISO 8601 string
-def format-iso8601 [date_value: datetime] {
+def format-iso8601 [date_value: any]: nothing -> string {
     if ($date_value | is-empty) { return "" }
 
     try {
@@ -76,9 +76,9 @@ def format-iso8601 [date_value: datetime] {
 }
 
 # Sanitize string for safe output (handle nulls and special chars)
-def sanitize-string []: nothing -> string {
-    if (is-empty) { return "" }
-    $in | to text
+def sanitize-string [value: any]: nothing -> string {
+    if ($value | is-empty) { return "" }
+    $value | to text
 }
 
 # Transform repository to minimal schema

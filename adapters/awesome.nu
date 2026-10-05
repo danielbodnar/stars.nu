@@ -354,10 +354,7 @@ export def fetch [
     let stars = parse-markdown $content
 
     if ($stars | is-empty) {
-        error make {
-            msg: $"Warning: No GitHub links found in ($source)"
-            label: {text: "no links found", span: (metadata $source).span}
-        }
+        print --stderr $"Warning: No GitHub links found in ($source)"
     }
 
     $stars

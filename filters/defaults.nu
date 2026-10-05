@@ -47,7 +47,9 @@ const DEFAULT_STALENESS_DAYS = 365
 #
 # Example:
 #   polars open stars.parquet | exclude-old --days 180 | polars collect
-export def exclude-old [--days (-d): int]: any -> any {
+export def exclude-old [
+    --days (-d): int = 365    # Repos not pushed in this many days are excluded
+]: any -> any {
     let cutoff_str = (date now) - ($days * 1day) | format date %Y-%m-%dT%H:%M:%SZ
     $in | polars filter ((polars col pushed | polars cast str) > (polars lit $cutoff_str))
 }

@@ -252,7 +252,7 @@ export def upsert [data: table]: nothing -> nothing {
     let existing = load | where { ($in.id | default 0) not-in $new_ids }
 
     # Ensure starred_at column exists in existing data
-    let existing = if $existing not-has starred_at {
+    let existing = if "starred_at" not-in ($existing | columns) {
         $existing | insert starred_at null
     } else { $existing }
 
@@ -353,13 +353,13 @@ export def migrate-from-gh-stars []: nothing -> bool {
 
     # Skip if new database already exists
     if ($paths.db_path | path exists) {
-        error make {msg: "New database already exists, skipping migration"}
+        print --stderr "New database already exists, skipping migration"
         return false
     }
 
     ensure-storage
 
-    error make {msg: $"Migrating from ($old_db_path) to ($paths.db_path)..."}
+    print --stderr $"Migrating from ($old_db_path) to ($paths.db_path)..."
 
     # Load data from old database
     let old_data = try {
@@ -372,7 +372,7 @@ export def migrate-from-gh-stars []: nothing -> bool {
     }
 
     if ($old_data | is-empty) {
-        error make {msg: "Old database is empty, nothing to migrate"}
+        print --stderr "Old database is empty, nothing to migrate"
         return false
     }
 
@@ -402,8 +402,8 @@ export def migrate-from-gh-stars []: nothing -> bool {
     }
 
     let count = $migrated_data | length
-    error make {msg: $"Successfully migrated ($count) stars to new location"}
-    error make {msg: $"Old database preserved at: ($old_db_path)"}
+    print --stderr $"Successfully migrated ($count) stars to new location"
+    print --stderr $"Old database preserved at: ($old_db_path)"
 
     true
 }

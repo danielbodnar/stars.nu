@@ -368,10 +368,7 @@ export def fetch [
     let all_bookmarks = parse-bookmarks $bookmarks_path $folder_filter
 
     if ($all_bookmarks | is-empty) {
-        error make {
-            msg: "No bookmarks found"
-            label: {text: "empty bookmarks", span: (metadata $bookmarks_path).span}
-        }
+        print --stderr "No bookmarks found"
         return []
     }
 
@@ -379,10 +376,7 @@ export def fetch [
     let github_bookmarks = $all_bookmarks | extract-github-repos
 
     if ($github_bookmarks | is-empty) {
-        error make {
-            msg: "No GitHub repository bookmarks found"
-            label: {text: "no GitHub repos", span: (metadata $bookmarks_path).span}
-        }
+        print --stderr "No GitHub repository bookmarks found"
         return []
     }
 

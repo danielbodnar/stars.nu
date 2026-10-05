@@ -78,10 +78,10 @@ def transform-repo-for-export [repo: record]: nothing -> record {
 }
 
 # Filter stars based on archive and fork options
-def filter-stars [include_archived, include_forks]: nothing -> table {
-    filter {|it|
-        let is_archived = ($it.archived? | default 0) == 1
-        let is_fork = ($it.fork? | default 0) == 1
+def filter-stars [stars: table, include_archived: bool, include_forks: bool]: nothing -> table {
+    $stars | where {|repo|
+        let is_archived = ($repo.archived? | default 0) == 1
+        let is_fork = ($repo.fork? | default 0) == 1
         (not $is_archived or $include_archived) and (not $is_fork or $include_forks)
     }
 }
@@ -95,7 +95,7 @@ def generate-bookmark-item [repo: record]: nothing -> string {
     let topics = parse-topics $repo.topics?
     let language = $repo.language? | default ""
     let all_tags = if ($language | str length) > 0 {
-        $topics ++ [($language | str downcase)]
+        $topics ++ [($language | str lowercase)]
     } else { $topics }
     let tags = $all_tags | str join ,
     let description = $repo.description? | default "" | str replace --all '"' '&quot;'

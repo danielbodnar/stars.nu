@@ -175,7 +175,10 @@ def load-config []: nothing -> record {
 }
 
 # Apply default filters to data
-def apply-default-filters [config: record] {
+def apply-default-filters [
+    data: table
+    config: record
+]: nothing -> table {
     let filters = $config.defaults?.filters? | default {}
     let exclude_archived = $filters.exclude_archived? | default true
     let exclude_forks = $filters.exclude_forks? | default false
@@ -184,17 +187,19 @@ def apply-default-filters [config: record] {
 
     let cutoff_date = (date now) - ($min_pushed_days * 1day)
 
-    where let is_archived = try {
-            let val = $it.archived? | default 0
+    $data | where {|repo|
+        # Handle archived/fork as int (0/1) from SQLite or bool
+        let is_archived = try {
+            let val = $repo.archived? | default 0
             if ($val | describe) == bool { $val } else { $val == 1 }
         } catch { false }
         let is_fork = try {
-            let val = $it.fork? | default 0
+            let val = $repo.fork? | default 0
             if ($val | describe) == bool { $val } else { $val == 1 }
         } catch { false }
-        let language = try { $it.language? | default "" } catch { "" }
+        let language = try { $repo.language? | default "" } catch { "" }
         let pushed_at = try {
-            $it.pushed_at? | default "" | into datetime
+            $repo.pushed_at? | default "" | into datetime
         } catch {
             date now
         }
@@ -206,26 +211,32 @@ def apply-default-filters [config: record] {
         let pass_pushed = $pushed_at > $cutoff_date
 
         $pass_archived and $pass_fork and $pass_language and $pass_pushed
+    }
 }
 
 # Search data by query string
-def search-data [query: string] {
-    let query_lower = $query | str downcase
+def search-data [
+    data: table
+    query: string
+]: nothing -> table {
+    let query_lower = $query | str lowercase
 
-    where let name = try { $it.name? | default "" | str downcase } catch { "" }
-        let full_name = try { $it.full_name? | default "" | str downcase } catch { "" }
-        let description = try { $it.description? | default "" | str downcase } catch { "" }
+    $data | where {|repo|
+        let name = try { $repo.name? | default "" | str lowercase } catch { "" }
+        let full_name = try { $repo.full_name? | default "" | str lowercase } catch { "" }
+        let description = try { $repo.description? | default "" | str lowercase } catch { "" }
         let topics_str = try {
-            let topics = $it.topics? | default "[]"
+            let topics = $repo.topics? | default "[]"
             let type = $topics | describe | str replace --regex '<.*' ''
             match $type {
-                "string" => { $topics | str downcase }
-                "list" => { $topics | str join " " | str downcase }
+                "string" => { $topics | str lowercase }
+                "list" => { $topics | str join " " | str lowercase }
                 _ => { "" }
             }
         } catch { "" }
 
         (($name =~ $query_lower) or ($full_name =~ $query_lower) or ($description =~ $query_lower) or ($topics_str =~ $query_lower))
+    }
 }
 
 # Sort data by field
@@ -257,30 +268,41 @@ def sort-data [
 }
 
 # Format data for output based on flags
-def format-output [config: any, columns: any, raw: any, json_flag: any, csv_flag: any, md_flag: any, nuon_flag: any, dataframe_flag: any, lazyframe_flag: any] {
+def format-output [
+    data: table
+    config: record
+    columns: list<string>
+    raw: bool
+    json_flag: bool
+    csv_flag: bool
+    md_flag: bool
+    nuon_flag: bool
+    dataframe_flag: bool
+    lazyframe_flag: bool
+]: nothing -> any {
     # Raw output - return as-is
     if $raw {
-        return $in
+        return $data
     }
 
     # JSON output
     if $json_flag {
-        return (to-json-output $in --pretty)
+        return (to-json-output $data --pretty)
     }
 
     # CSV output
     if $csv_flag {
-        return (to-csv-output $in)
+        return (to-csv-output $data)
     }
 
     # Markdown output
     if $md_flag {
-        return (to-md-output $in --columns $columns)
+        return (to-md-output $data --columns $columns)
     }
 
     # NUON output
     if $nuon_flag {
-        return (to-nuon-output $in --pretty)
+        return (to-nuon-output $data --pretty)
     }
 
     # DataFrame output
@@ -291,7 +313,7 @@ def format-output [config: any, columns: any, raw: any, json_flag: any, csv_flag
                 help: "Install nu_plugin_polars: cargo install nu_plugin_polars && plugin add ~/.cargo/bin/nu_plugin_polars"
             }
         }
-        return (to-dataframe $in)
+        return (to-dataframe $data)
     }
 
     # LazyFrame output
@@ -302,11 +324,11 @@ def format-output [config: any, columns: any, raw: any, json_flag: any, csv_flag
                 help: "Install nu_plugin_polars: cargo install nu_plugin_polars && plugin add ~/.cargo/bin/nu_plugin_polars"
             }
         }
-        return (to-lazyframe $in)
+        return (to-lazyframe $data)
     }
 
     # Default: formatted table
-    $in | format --columns $columns
+    $data | format --columns $columns
 }
 
 # Check for migration from gh-stars on first use
@@ -367,8 +389,8 @@ def check-migration []: nothing -> bool {
 #
 #   # Get Polars DataFrame for analysis
 #   stars --dataframe | polars filter ((polars col language) == "Rust")
-def main [
-    query?: string                       # Optional search query
+export def main [
+    query?: string                      # Optional search query
     --json                               # Output as JSON
     --csv                                # Output as CSV
     --md                                 # Output as Markdown
@@ -383,7 +405,7 @@ def main [
     --reverse (-r)                       # Reverse sort order
 ]: nothing -> any {
     # Check for migration on first use
-    check-migration
+    check-migration | ignore
 
     # Load configuration
     let config = load-config
@@ -504,7 +526,7 @@ export def "stars sync" [
             let backup_path = backup
             print $"Backup created: ($backup_path)"
         } catch {|e|
-            error make {msg: $"Warning: Failed to create backup: ($e.msg)"}
+            print --stderr $"Warning: Failed to create backup: ($e.msg)"
         }
     }
 
@@ -621,7 +643,7 @@ export def "stars sync github" [
             let backup_path = backup
             print $"Backup created: ($backup_path)"
         } catch {|e|
-            error make {msg: $"Warning: Failed to create backup: ($e.msg)"}
+            print --stderr $"Warning: Failed to create backup: ($e.msg)"
         }
     }
 

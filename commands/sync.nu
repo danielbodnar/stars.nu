@@ -78,7 +78,7 @@ def process-github-page [
         let new_total = $ctx.total + $page_count
 
         if $ctx.verbose {
-            error make {msg: $"  Page ($ctx.page): ($page_count) stars \(total: ($new_total)\)"}
+            print --stderr $"  Page ($ctx.page): ($page_count) stars \(total: ($new_total)\)"
         }
 
         if $page_count < $ctx.page_size {
@@ -131,7 +131,7 @@ def get-firefox-places-path [] {
     let linux_path = $home | path join .mozilla firefox
     if ($linux_path | path exists) {
         let profiles = try { ls $linux_path | where type == dir } catch { [] }
-        let default_profile = $profiles | where name =~ \.default | first?
+        let default_profile = $profiles | where name =~ \.default | get 0?
         if $default_profile != null {
             let places = $default_profile.name | path join places.sqlite
             if ($places | path exists) {
@@ -144,7 +144,7 @@ def get-firefox-places-path [] {
     let macos_path = $home | path join Library "Application Support" Firefox Profiles
     if ($macos_path | path exists) {
         let profiles = try { ls $macos_path | where type == dir } catch { [] }
-        let default_profile = $profiles | where name =~ \.default | first?
+        let default_profile = $profiles | where name =~ \.default | get 0?
         if $default_profile != null {
             let places = $default_profile.name | path join places.sqlite
             if ($places | path exists) {
@@ -287,18 +287,18 @@ export def "stars sync github" [
 
     if $verbose {
         if ($target_user | is-empty) {
-            error make {msg: ""Syncing stars for authenticated user...""}
+            print --stderr "Syncing stars for authenticated user..."
         } else {
-            error make {msg: $"Syncing stars for user: ($target_user)..."}
+            print --stderr $"Syncing stars for user: ($target_user)..."
         }
-        error make {msg: $"  Cache: (if $use_cache { 'enabled (1h)' } else { 'disabled' })"}
-        error make {msg: $"  Page size: ($page_size)"}
+        print --stderr $"  Cache: (if $use_cache { 'enabled (1h)' } else { 'disabled' })"
+        print --stderr $"  Page size: ($page_size)"
     }
 
     # Handle refresh: remove existing GitHub entries
     if $refresh and ($paths.db_path | path exists) {
         if $verbose {
-            error make {msg: ""  Removing existing GitHub entries...""}
+            print --stderr "  Removing existing GitHub entries..."
         }
         try {
             open $paths.db_path | query db "DELETE FROM stars WHERE source = 'github'"
@@ -312,10 +312,10 @@ export def "stars sync github" [
         let stats = storage get-stats
         if $stats.total_stars > 100 {
             if $verbose {
-                error make {msg: ""  Creating backup...""}
+                print --stderr "  Creating backup..."
             }
             try {
-                storage backup
+                storage backup | ignore
             } catch {
                 # Non-fatal, continue
             }
@@ -334,9 +334,9 @@ export def "stars sync github" [
     let star_count = $all_stars | length
 
     if $verbose {
-        error make {msg: $"Sync complete: ($star_count) GitHub stars"}
+        print --stderr $"Sync complete: ($star_count) GitHub stars"
     } else {
-        error make {msg: $"Synced ($star_count) stars from GitHub"}
+        print --stderr $"Synced ($star_count) stars from GitHub"
     }
 }
 
@@ -383,16 +383,16 @@ export def "stars sync firefox" [
     }
 
     if $verbose {
-        error make {msg: $"Reading Firefox bookmarks from: ($places_path)"}
+        print --stderr $"Reading Firefox bookmarks from: ($places_path)"
         if $folder != null {
-            error make {msg: $"  Filtering folder: ($folder)"}
+            print --stderr $"  Filtering folder: ($folder)"
         }
     }
 
     # TODO: Implement via adapters/firefox.nu
     # For now, print a stub message
-    error make {msg: ""Firefox sync not yet implemented""}
-    error make {msg: ""Adapter will be added in adapters/firefox.nu""}
+    print --stderr "Firefox sync not yet implemented"
+    print --stderr "Adapter will be added in adapters/firefox.nu"
 
     # Stub: would call something like:
     # use ../adapters/firefox.nu
@@ -444,16 +444,16 @@ export def "stars sync chrome" [
     }
 
     if $verbose {
-        error make {msg: $"Reading Chrome bookmarks from: ($bookmarks_path)"}
+        print --stderr $"Reading Chrome bookmarks from: ($bookmarks_path)"
         if $folder != null {
-            error make {msg: $"  Filtering folder: ($folder)"}
+            print --stderr $"  Filtering folder: ($folder)"
         }
     }
 
     # TODO: Implement via adapters/chrome.nu
     # For now, print a stub message
-    error make {msg: ""Chrome sync not yet implemented""}
-    error make {msg: ""Adapter will be added in adapters/chrome.nu""}
+    print --stderr "Chrome sync not yet implemented"
+    print --stderr "Adapter will be added in adapters/chrome.nu"
 
     # Stub: would call something like:
     # use ../adapters/chrome.nu
@@ -486,9 +486,9 @@ export def "stars sync awesome" [
 
     if $verbose {
         if $is_url {
-            error make {msg: $"Fetching awesome list from: ($url_or_path)"}
+            print --stderr $"Fetching awesome list from: ($url_or_path)"
         } else {
-            error make {msg: $"Reading awesome list from: ($url_or_path)"}
+            print --stderr $"Reading awesome list from: ($url_or_path)"
         }
     }
 
@@ -500,8 +500,8 @@ export def "stars sync awesome" [
 
     # TODO: Implement via adapters/awesome.nu
     # For now, print a stub message
-    error make {msg: ""Awesome list sync not yet implemented""}
-    error make {msg: ""Adapter will be added in adapters/awesome.nu""}
+    print --stderr "Awesome list sync not yet implemented"
+    print --stderr "Adapter will be added in adapters/awesome.nu"
 
     # Stub: would call something like:
     # use ../adapters/awesome.nu
@@ -531,11 +531,11 @@ export def "stars sync all" [
     --refresh (-r)             # Force refresh all sources
     --verbose (-v)             # Show detailed progress
 ]: nothing -> nothing {
-    error make {msg: ""Syncing all configured sources...""}
-    error make {msg: """"}
+    print --stderr "Syncing all configured sources..."
+    print --stderr ""
 
     # 1. GitHub (always available if gh is authenticated)
-    error make {msg: ""[1/3] GitHub...""}
+    print --stderr "[1/3] GitHub..."
     try {
         if $refresh {
             stars sync github --refresh --verbose=$verbose
@@ -543,41 +543,41 @@ export def "stars sync all" [
             stars sync github --verbose=$verbose
         }
     } catch {|e|
-        error make {msg: $"  Warning: GitHub sync failed: ($e.msg)"}
+        print --stderr $"  Warning: GitHub sync failed: ($e.msg)"
     }
-    error make {msg: """"}
+    print --stderr ""
 
     # 2. Firefox (if places.sqlite exists)
-    error make {msg: ""[2/3] Firefox...""}
+    print --stderr "[2/3] Firefox..."
     let places = get-firefox-places-path
     if $places != null {
         try {
             stars sync firefox --file $places --verbose=$verbose
         } catch {|e|
-            error make {msg: $"  Warning: Firefox sync failed: ($e.msg)"}
+            print --stderr $"  Warning: Firefox sync failed: ($e.msg)"
         }
     } else {
-        error make {msg: ""  Skipped: Firefox places.sqlite not found""}
+        print --stderr "  Skipped: Firefox places.sqlite not found"
     }
-    error make {msg: """"}
+    print --stderr ""
 
     # 3. Chrome (if Bookmarks exists)
-    error make {msg: ""[3/3] Chrome...""}
+    print --stderr "[3/3] Chrome..."
     let bookmarks = get-chrome-bookmarks-path
     if $bookmarks != null {
         try {
             stars sync chrome --file $bookmarks --verbose=$verbose
         } catch {|e|
-            error make {msg: $"  Warning: Chrome sync failed: ($e.msg)"}
+            print --stderr $"  Warning: Chrome sync failed: ($e.msg)"
         }
     } else {
-        error make {msg: ""  Skipped: Chrome Bookmarks not found""}
+        print --stderr "  Skipped: Chrome Bookmarks not found"
     }
-    error make {msg: """"}
+    print --stderr ""
 
     # Report final stats
     let stats = storage get-stats
-    error make {msg: $"Sync complete. Total stars: ($stats.total_stars)"}
+    print --stderr $"Sync complete. Total stars: ($stats.total_stars)"
 }
 
 # Show sync status for all sources
@@ -592,7 +592,7 @@ export def "stars sync status" []: nothing -> table {
     let stats = storage get-stats
 
     if not $stats.exists {
-        error make {msg: ""No database found. Run 'stars sync' to create one.""}
+        print --stderr "No database found. Run 'stars sync' to create one."
         return []
     }
 
@@ -618,15 +618,15 @@ export def "stars sync status" []: nothing -> table {
     let chrome_path = get-chrome-bookmarks-path
     let chrome_available = $chrome_path != null and ($chrome_path | path exists)
 
-    error make {msg: $"Database: ($paths.db_path)"}
-    error make {msg: $"Total stars: ($stats.total_stars)"}
-    error make {msg: $"Last modified: ($stats.last_modified)"}
-    error make {msg: """"}
-    error make {msg: ""Available sources:""}
-    error make {msg: $"  GitHub:  (if $gh_available { 'ready' } else { 'not authenticated' })"}
-    error make {msg: $"  Firefox: (if $firefox_available { 'ready' } else { 'not found' })"}
-    error make {msg: $"  Chrome:  (if $chrome_available { 'ready' } else { 'not found' })"}
-    error make {msg: """"}
+    print --stderr $"Database: ($paths.db_path)"
+    print --stderr $"Total stars: ($stats.total_stars)"
+    print --stderr $"Last modified: ($stats.last_modified)"
+    print --stderr ""
+    print --stderr "Available sources:"
+    print --stderr $"  GitHub:  (if $gh_available { 'ready' } else { 'not authenticated' })"
+    print --stderr $"  Firefox: (if $firefox_available { 'ready' } else { 'not found' })"
+    print --stderr $"  Chrome:  (if $chrome_available { 'ready' } else { 'not found' })"
+    print --stderr ""
 
     $source_counts
 }

@@ -137,7 +137,9 @@ export def format-stars [
 #
 # Example:
 #   format-date "2024-01-15T10:30:00Z" # Returns "2024-01-15"
-export def format-date [date: datetime] {
+export def format-date [
+    date: any # Date to format
+]: nothing -> string {
     if ($date | is-empty) {
         return ""
     }
@@ -215,11 +217,12 @@ export def colorize-language [
 # ============================================================================
 
 # Parse owner login from JSON string or record
-def get-owner-login [owner: string] {
+def get-owner-login [owner: any]: nothing -> string {
     try {
         let type = $owner | describe | str replace --regex '<.*' ''
         match $type {
-            "string" => { $owner | from json | get login }
+            # Stored rows hold the plain login; older rows hold a JSON object
+            "string" => { try { $owner | from json | get login } catch { $owner } }
             "record" => { $owner | get login }
             _ => { "unknown" }
         }
@@ -348,7 +351,7 @@ export def format [
     let cols = if ($columns | is-empty) { $DEFAULT_COLUMNS } else { $columns }
 
     # Filter to only existing columns and return
-    let available_cols = $cols | where $formatted has $it
+    let available_cols = $cols | where {|c| $c in ($formatted | columns) }
     $formatted | select ...$available_cols
 }
 
